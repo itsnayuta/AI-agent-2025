@@ -9,9 +9,14 @@ from utils.time_patterns import (
             parse_weekday_next_week,
             parse_time_period_day,
             parse_time_period_weekday,
+            parse_time_period_weekday_with_hour,
             parse_after_days,
             parse_after_weeks,
-            parse_after_months
+            parse_after_months,
+            parse_weekday_time,
+            parse_time_weekday_this_week,
+            parse_time_weekday_next_week,
+            parse_time_weekday
         )
 from utils.task_categories import task_categories
 
@@ -30,11 +35,13 @@ class ScheduleAdvisor:
             'thứ bảy': 5, 't7': 5, 'thứ 7': 5, 'thứbảy': 5, 'thứ7': 5
         }
         self.time_patterns = [
+            # Ưu tiên cao nhất: period + weekday + hour (tối thứ 7 lúc 13h)
+            (r"(sáng|chiều|tối)\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*(?:lúc|vào)?\s*(\d{1,2})(?:h|:)?(\d{2})?", lambda m: parse_time_period_weekday_with_hour(m, self.current_time, self.weekday_map)),
             # Ưu tiên nhận diện 'thứ ... (tuần ...) (lúc|vào) ...h' với khoảng trắng linh hoạt
-            (r"(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*(?:tuần\s*này|tuần\s*sau)?\s*(?:lúc|vào)?\s*(\d{1,2})(?:h|:)?(\d{2})?", lambda m: self._parse_weekday_time(m)),
-            (r"(\d{1,2})(?:h|:)?(\d{2})?\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*tuần\s*này", lambda m: self._parse_time_weekday_this_week(m)),
-            (r"(\d{1,2})(?:h|:)?(\d{2})?\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*tuần\s*sau", lambda m: self._parse_time_weekday_next_week(m)),
-            (r"(\d{1,2})(?:h|:)?(\d{2})?\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])", lambda m: self._parse_time_weekday(m)),
+            (r"(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*(?:tuần\s*này|tuần\s*sau)?\s*(?:lúc|vào)?\s*(\d{1,2})(?:h|:)?(\d{2})?", lambda m: parse_weekday_time(m, self.current_time, self.weekday_map)),
+            (r"(\d{1,2})(?:h|:)?(\d{2})?\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*tuần\s*này", lambda m: parse_time_weekday_this_week(m, self.current_time, self.weekday_map)),
+            (r"(\d{1,2})(?:h|:)?(\d{2})?\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*tuần\s*sau", lambda m: parse_time_weekday_next_week(m, self.current_time, self.weekday_map)),
+            (r"(\d{1,2})(?:h|:)?(\d{2})?\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])", lambda m: parse_time_weekday(m, self.current_time, self.weekday_map)),
             (r"(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*tuần\s*này", lambda m: parse_weekday_this_week(m, self.current_time, self.weekday_map)),
             (r"(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*tuần\s*sau", lambda m: parse_weekday_next_week(m, self.current_time, self.weekday_map)),
             (r"(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])", lambda m: parse_weekday(m, self.current_time, self.weekday_map)),
@@ -46,69 +53,6 @@ class ScheduleAdvisor:
         ] + get_time_patterns(self.current_time)
         
         self.task_categories = task_categories
-
-    def _parse_weekday_time(self, match):
-        """Parse pattern: thứ 2 lúc 14h, thứ 7 lúc 12h"""
-        weekday_str = match.group(1).lower().replace(' ', '')
-        hour = int(match.group(2)) if match.group(2) else 8
-        minute = int(match.group(3)) if match.group(3) else 0
-        target_weekday = self.weekday_map.get(weekday_str)
-        if target_weekday is None:
-            return None
-        days_ahead = target_weekday - self.current_time.weekday()
-        if days_ahead < 0:
-            # Nếu ngày đã qua trong tuần này thì hiểu là tuần sau
-            days_ahead += 7
-        target_date = self.current_time + timedelta(days=days_ahead)
-        return target_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
-
-    def _parse_time_weekday_this_week(self, match):
-        """Parse pattern: 12h thứ 7 tuần này"""
-        hour = int(match.group(1))
-        minute = int(match.group(2)) if match.group(2) else 0
-        weekday_str = match.group(3).lower().replace(' ', '')
-        
-        target_weekday = self.weekday_map.get(weekday_str)
-        if target_weekday is None:
-            return None
-            
-        days_ahead = target_weekday - self.current_time.weekday()
-        if days_ahead < 0:
-            days_ahead += 7
-            
-        target_date = self.current_time + timedelta(days=days_ahead)
-        return target_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
-
-    def _parse_time_weekday_next_week(self, match):
-        """Parse pattern: 12h thứ 7 tuần sau"""
-        hour = int(match.group(1))
-        minute = int(match.group(2)) if match.group(2) else 0
-        weekday_str = match.group(3).lower().replace(' ', '')
-        
-        target_weekday = self.weekday_map.get(weekday_str)
-        if target_weekday is None:
-            return None
-            
-        days_ahead = target_weekday - self.current_time.weekday() + 7
-        target_date = self.current_time + timedelta(days=days_ahead)
-        return target_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
-
-    def _parse_time_weekday(self, match):
-        """Parse pattern: 12h thứ 7"""
-        hour = int(match.group(1))
-        minute = int(match.group(2)) if match.group(2) else 0
-        weekday_str = match.group(3).lower().replace(' ', '')
-        
-        target_weekday = self.weekday_map.get(weekday_str)
-        if target_weekday is None:
-            return None
-            
-        days_ahead = target_weekday - self.current_time.weekday()
-        if days_ahead <= 0:
-            days_ahead += 7
-            
-        target_date = self.current_time + timedelta(days=days_ahead)
-        return target_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
 
     def _extract_time(self, text: str) -> Optional[datetime]:
         text_lower = text.lower()
@@ -194,6 +138,8 @@ class ScheduleAdvisor:
                     'priority': priority_info,
                     'warnings': warnings,
                     'alternatives': alternatives,
+                    'suggested_time': suggested_time,  # Thời gian gốc từ người dùng
+                    'adjusted_time': adjusted_time,     # Thời gian được điều chỉnh
                     'status': 'success'
                 }
             else:
