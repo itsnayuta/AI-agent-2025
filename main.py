@@ -1,8 +1,11 @@
 
 import os
-import google.generativeai as genai
-from core.agents import advise_schedule
+import google.generativeai as genai 
+from core.agents import ScheduleAdvisor
 from core.tasks import execute_schedule, notify_schedule_change
+from dotenv import load_dotenv
+
+load_dotenv()
 
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 if not GEMINI_API_KEY:
@@ -11,50 +14,49 @@ if not GEMINI_API_KEY:
 # Khởi tạo Gemini
 genai.configure(api_key=GEMINI_API_KEY)
 
-# Function calling
+# Function calling - chuẩn Gemini API
 functions = [
     {
         "name": "advise_schedule",
-        "description": "Tư vấn lập lịch cho người dùng.",
-        "parameters": {"type": "object", "properties": {"user_info": {"type": "string"}}}
+        "description": "Tư vấn lập lịch cho người dùng."
     },
     {
-        "name": "execute_schedule",
-        "description": "Thực hiện lập lịch cho người dùng.",
-        "parameters": {"type": "object", "properties": {"schedule_info": {"type": "string"}}}
+        "name": "execute_schedule", 
+        "description": "Thực hiện lập lịch cho người dùng."
     },
     {
         "name": "notify_schedule_change",
-        "description": "Gửi email khi có thay đổi thời gian biểu.",
-        "parameters": {"type": "object", "properties": {"user_email": {"type": "string"}, "change_info": {"type": "string"}}}
+        "description": "Gửi email khi có thay đổi thời gian biểu."
     }
 ]
 
 def handle_function_call(call):
-    name = call["name"]
-    args = call["args"]
+    name = call.name
+    args = call.args if hasattr(call, 'args') else {}
+    advisor = ScheduleAdvisor()
     if name == "advise_schedule":
-        return advise_schedule(args.get("user_info", ""))
+        result = advisor.advise_schedule(user_input)
+        return advisor.format_response(result)
     elif name == "execute_schedule":
-        return execute_schedule(args.get("schedule_info", ""))
+        return execute_schedule(user_input)
     elif name == "notify_schedule_change":
-        return notify_schedule_change(args.get("user_email", ""), args.get("change_info", ""))
+        return notify_schedule_change("user@example.com", user_input)
     else:
         return "Chức năng không hỗ trợ."
 
 def process_user_input(user_input):
-    model = genai.GenerativeModel('gemini-pro')
-    response = model.generate_content(
-        user_input,
-        tools=functions,
-        tool_config={"function_calling": "auto"}
-    )
-    print("Gemini trả lời:", response.text)
-    # Nếu Gemini yêu cầu gọi hàm
-    if hasattr(response, "function_calls") and response.function_calls:
-        for call in response.function_calls:
-            result = handle_function_call(call)
-            print(f"Kết quả thực thi hàm {call['name']}: {result}")
+    # Test trực tiếp logic AI trước
+    advisor = ScheduleAdvisor()
+    result = advisor.advise_schedule(user_input)
+    response_text = advisor.format_response(result)
+    print("Kết quả tư vấn:")
+    print(response_text)
+    
+    # Sau này có thể thêm Gemini function calling
+    # model = genai.GenerativeModel('gemini-1.5-flash')
+    # response = model.generate_content(user_input, tools=functions)
+    
+    return result
 
 if __name__ == "__main__":
     print("=== AI Agent Lập lịch với Gemini ===")
