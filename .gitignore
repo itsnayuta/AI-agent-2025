@@ -215,6 +215,7 @@ database/
 
 # Google OAuth tokens
 token.pickle
+core/OAuth/
 
 # Test files
 test_*.py
