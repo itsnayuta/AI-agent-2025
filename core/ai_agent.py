@@ -15,7 +15,6 @@ class AIAgent:
         self.advisor = ScheduleAdvisor()
     
     def process_user_input(self, user_input: str) -> str:
-        """Process user input and return response"""
         print("🔄 Đang xử lý yêu cầu...")
         
         try:

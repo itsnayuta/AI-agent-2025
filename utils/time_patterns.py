@@ -1,3 +1,7 @@
+import re
+from datetime import datetime, timedelta
+from typing import Optional
+
 def parse_weekday(match, current_time, weekday_map):
     weekday_str = match.group(1).lower().replace(' ', '')
     target_weekday = weekday_map.get(weekday_str)
@@ -85,7 +89,6 @@ def parse_after_months(match, current_time):
     return datetime(target_year, target_month, current_time.day, 8, 0)
 
 def parse_time_period_weekday_with_hour(match, current_time, weekday_map):
-    """Parse pattern: tối thứ 7 lúc 13h - xử lý period + weekday + hour"""
     period = match.group(1).lower()
     weekday_str = match.group(2).lower().replace(' ', '')
     hour = int(match.group(3)) if match.group(3) else 8
@@ -95,44 +98,36 @@ def parse_time_period_weekday_with_hour(match, current_time, weekday_map):
     if target_weekday is None:
         return None
     
-    # Tính ngày thứ 7 tiếp theo
     days_ahead = target_weekday - current_time.weekday()
     if days_ahead <= 0:
         days_ahead += 7
     base_date = current_time + timedelta(days=days_ahead)
     
-    # LOGIC MỚI: Xử lý period với giờ đã cho
     if period == 'sáng':
-        # Sáng: 6h-11h, nếu giờ cho > 11h thì hiểu là buổi sáng sớm (6h-8h)
         final_hour = hour if 6 <= hour <= 11 else 8
     elif period == 'chiều':
-        # Chiều: 12h-17h, nếu giờ cho < 12h thì hiểu là chiều (giữ nguyên nếu hợp lý)
         if 12 <= hour <= 17:
             final_hour = hour
         elif hour < 12:
-            final_hour = hour + 12 if hour + 12 <= 17 else 14  # default chiều 2PM
-        else:
-            final_hour = 14  # default
+            final_hour = hour + 12 if hour + 12 <= 17 else 14 
+            final_hour = 14  
     elif period == 'tối':
-        # Tối: 18h-23h, với giờ cho, hiểu theo ngữ cảnh
         if 18 <= hour <= 23:
-            final_hour = hour  # đã đúng khung tối
+            final_hour = hour 
         elif 6 <= hour <= 11:
-            final_hour = hour + 12  # 7h tối = 19h, 8h tối = 20h
+            final_hour = hour + 12 
         elif 12 <= hour <= 17:
-            final_hour = hour + 6 if hour + 6 <= 23 else 19  # 1h tối = 19h, 2h tối = 20h
+            final_hour = hour + 6 if hour + 6 <= 23 else 19
         else:
-            final_hour = 19  # default tối 7PM
+            final_hour = 19
     else:
         final_hour = hour
     
-    # Đảm bảo giờ hợp lệ (0-23)
     final_hour = max(0, min(23, final_hour))
     
     return base_date.replace(hour=final_hour, minute=minute, second=0, microsecond=0)
 
 def parse_weekday_time(match, current_time, weekday_map):
-    """Parse pattern: thứ 2 lúc 14h, thứ 7 lúc 12h"""
     weekday_str = match.group(1).lower().replace(' ', '')
     hour = int(match.group(2)) if match.group(2) else 8
     minute = int(match.group(3)) if match.group(3) else 0
@@ -146,7 +141,6 @@ def parse_weekday_time(match, current_time, weekday_map):
     return target_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
 
 def parse_time_weekday_this_week(match, current_time, weekday_map):
-    """Parse pattern: 12h thứ 7 tuần này"""
     hour = int(match.group(1))
     minute = int(match.group(2)) if match.group(2) else 0
     weekday_str = match.group(3).lower().replace(' ', '')
@@ -160,7 +154,6 @@ def parse_time_weekday_this_week(match, current_time, weekday_map):
     return target_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
 
 def parse_time_weekday_next_week(match, current_time, weekday_map):
-    """Parse pattern: 12h thứ 7 tuần sau"""
     hour = int(match.group(1))
     minute = int(match.group(2)) if match.group(2) else 0
     weekday_str = match.group(3).lower().replace(' ', '')
@@ -172,7 +165,6 @@ def parse_time_weekday_next_week(match, current_time, weekday_map):
     return target_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
 
 def parse_time_weekday(match, current_time, weekday_map):
-    """Parse pattern: 12h thứ 7"""
     hour = int(match.group(1))
     minute = int(match.group(2)) if match.group(2) else 0
     weekday_str = match.group(3).lower().replace(' ', '')
@@ -184,10 +176,6 @@ def parse_time_weekday(match, current_time, weekday_map):
         days_ahead += 7
     target_date = current_time + timedelta(days=days_ahead)
     return target_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
-import re
-from datetime import datetime, timedelta
-from typing import Optional
-
 def parse_specific_date(match, current_time):
     try:
         day = int(match.group(1))
@@ -242,12 +230,6 @@ def parse_next_month(match, current_time):
     return datetime(year, next_month, 1, 8, 0)
 
 def get_time_patterns(current_time):
-    from utils.time_patterns import (
-        parse_specific_date, parse_time, parse_today, parse_tomorrow,
-        parse_day_after_tomorrow, parse_next_week, parse_this_week, parse_next_month,
-        parse_weekday_time, parse_time_weekday_this_week, parse_time_weekday_next_week,
-        parse_time_weekday
-    )
     return [
         (r"ngày\s*(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{4}))?", lambda m: parse_specific_date(m, current_time)),
         (r"(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{4}))?", lambda m: parse_specific_date(m, current_time)),

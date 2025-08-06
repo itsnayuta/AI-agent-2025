@@ -2,7 +2,7 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import pytest
-from core.ScheduleAdvisor import ScheduleAdvisor
+from core.services.ScheduleAdvisor import ScheduleAdvisor
 
 def test_advise_schedule_thu7_9h():
     advisor = ScheduleAdvisor()

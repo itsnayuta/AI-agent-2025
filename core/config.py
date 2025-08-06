@@ -8,7 +8,7 @@ class Config:
     # API Settings
     GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
     GEMINI_MODEL = 'gemini-1.5-flash'
-    GEMINI_TIMEOUT = 15
+    GEMINI_TIMEOUT = 30
     
     # Database Settings
     DATABASE_PATH = 'database/schedule.db'
@@ -29,6 +29,6 @@ class Config:
     }
     
     # Time Settings
-    BUSINESS_HOURS = (8, 17)
+    WORK_TIME = (8, 17)
     LUNCH_TIME = (12, 13)
-    DEFAULT_DURATION = 60  # minutes
+    DEFAULT_DURATION = 60 

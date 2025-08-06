@@ -1,8 +1,7 @@
-# Function definitions for Gemini AI
 from typing import List, Dict, Any
 
 def get_function_definitions() -> List[Dict[str, Any]]:
-    """Get all function definitions for Gemini AI"""
+    """Định nghĩa các function cho Gemini AI"""
     return [
         {
             "name": "advise_schedule",
@@ -20,7 +19,7 @@ def get_function_definitions() -> List[Dict[str, Any]]:
         },
         {
             "name": "smart_add_schedule",
-            "description": "Thêm lịch thông minh - tự động phân tích thời gian từ ngôn ngữ tự nhiên rồi thêm vào hệ thống",
+            "description": "Thêm lịch thông minh, tự động phân tích thời gian từ ngôn ngữ tự nhiên rồi thêm vào hệ thống",
             "parameters": {
                 "type": "object",
                 "properties": {

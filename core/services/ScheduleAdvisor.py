@@ -1,5 +1,4 @@
 import re
-import json
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Union
 from utils.time_patterns import (
@@ -35,9 +34,9 @@ class ScheduleAdvisor:
             'thứ bảy': 5, 't7': 5, 'thứ 7': 5, 'thứbảy': 5, 'thứ7': 5
         }
         self.time_patterns = [
-            # Ưu tiên cao nhất: period + weekday + hour (tối thứ 7 lúc 13h)
+            #period + weekday + hour (tối thứ 7 lúc 13h)
             (r"(sáng|chiều|tối)\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*(?:lúc|vào)?\s*(\d{1,2})(?:h|:)?(\d{2})?", lambda m: parse_time_period_weekday_with_hour(m, self.current_time, self.weekday_map)),
-            # Ưu tiên nhận diện 'thứ ... (tuần ...) (lúc|vào) ...h' với khoảng trắng linh hoạt
+            #'thứ ... (tuần ...) (lúc|vào) ...h' với khoảng trắng linh hoạt
             (r"(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*(?:tuần\s*này|tuần\s*sau)?\s*(?:lúc|vào)?\s*(\d{1,2})(?:h|:)?(\d{2})?", lambda m: parse_weekday_time(m, self.current_time, self.weekday_map)),
             (r"(\d{1,2})(?:h|:)?(\d{2})?\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*tuần\s*này", lambda m: parse_time_weekday_this_week(m, self.current_time, self.weekday_map)),
             (r"(\d{1,2})(?:h|:)?(\d{2})?\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*tuần\s*sau", lambda m: parse_time_weekday_next_week(m, self.current_time, self.weekday_map)),
@@ -62,7 +61,7 @@ class ScheduleAdvisor:
                 try:
                     result = parser(match)
                     if result:
-                        # Nếu kết quả là quá khứ thì không trả về
+                        # Neeus laf ngày trong quá khứ thì bỏ
                         if result > self.current_time:
                             return result
                         else:
@@ -133,11 +132,11 @@ class ScheduleAdvisor:
                 duration_info = f"⏱️ **Thời lượng gợi ý:** {task_info['duration']} phút"
                 priority_info = f"🎯 **Mức độ ưu tiên:** {priority}"
                 response = {
-                    'main_suggestion': main_suggestion,
-                    'duration': duration_info,
-                    'priority': priority_info,
-                    'warnings': warnings,
-                    'alternatives': alternatives,
+                    'main_suggestion': main_suggestion, # Đề xuất chính
+                    'duration': duration_info, # Thời gian gợi ý
+                    'priority': priority_info, # Mức độ ưu tiên
+                    'warnings': warnings, # Cảnh báo
+                    'alternatives': alternatives, # Thời gian thay thế
                     'suggested_time': suggested_time,  # Thời gian gốc từ người dùng
                     'adjusted_time': adjusted_time,     # Thời gian được điều chỉnh
                     'status': 'success'
