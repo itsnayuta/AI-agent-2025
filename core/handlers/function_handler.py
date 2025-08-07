@@ -29,9 +29,9 @@ class FunctionCallHandler:
             elif name == "delete_schedule":
                 return self._handle_delete_schedule(args, executor)
             else:
-                return "❌ Chức năng không hỗ trợ."
+                return "Chức năng không hỗ trợ."
         except Exception as e:
-            return f"❌ Lỗi khi thực hiện: {str(e)}"
+            return f"Lỗi khi thực hiện: {str(e)}"
         finally:
             executor.close()
     
@@ -45,17 +45,17 @@ class FunctionCallHandler:
         """Xử lý thêm lịch thông minh"""
         user_request = args.get('user_request', user_input)
         
-        print(f"🔍 DEBUG smart_add_schedule:")
-        print(f"   user_request: {user_request}")
+        print(f"DEBUG smart_add_schedule:")
+        print(f"user_request: {user_request}")
         
         # 1. Phân tích thời gian từ input
         advisor_result = self.advisor.advise_schedule(user_request)
         
         if 'suggested_time' not in advisor_result:
-            return "❌ Không thể phân tích thời gian từ yêu cầu của bạn."
+            return "Không thể phân tích thời gian từ yêu cầu của bạn."
         
         suggested_time = advisor_result['suggested_time']
-        print(f"   ✅ Parsed time: {suggested_time}")
+        print(f"Parsed time: {suggested_time}")
         
         # 2. Trích xuất thông tin từ yêu cầu
         #title = self._extract_title(user_request)
@@ -74,7 +74,7 @@ class FunctionCallHandler:
         start_time_str = suggested_time.strftime('%Y-%m-%dT%H:%M:%S')
         end_time_str = end_time.strftime('%Y-%m-%dT%H:%M:%S')
         
-        print(f"   ✅ Final times: {start_time_str} - {end_time_str}")
+        print(f"Final times: {start_time_str} - {end_time_str}")
 
         # 6. Thêm vào database
         result = executor.add_schedule(title, description, start_time_str, end_time_str)
@@ -84,9 +84,9 @@ class FunctionCallHandler:
         """Xử lý yêu cầu lấy danh sách lịch"""
         schedules = executor.get_schedules()
         if not schedules:
-            return "📋 Hiện tại chưa có lịch nào được lưu."
+            return "Hiện tại chưa có lịch nào được lưu."
         
-        result = "📋 **Danh sách lịch:**\n"
+        result = "**Danh sách lịch:**\n"
         for schedule in schedules:
             result += f"ID: {schedule[0]} | {schedule[1]} | {schedule[3]} - {schedule[4]}\n"
             result += f"   Mô tả: {schedule[2]}\n\n"
@@ -96,7 +96,7 @@ class FunctionCallHandler:
         """Xử lý yêu cầu cập nhật lịch"""
         schedule_id = args.get('schedule_id')
         if not schedule_id:
-            return "❌ Thiếu ID lịch cần cập nhật."
+            return "Thiếu ID lịch cần cập nhật."
         
         title = args.get('title')
         description = args.get('description')
@@ -110,7 +110,7 @@ class FunctionCallHandler:
         """Xử lý yêu cầu xóa lịch"""
         schedule_id = args.get('schedule_id')
         if not schedule_id:
-            return "❌ Thiếu ID lịch cần xóa."
+            return "Thiếu ID lịch cần xóa."
         
         result = executor.delete_schedule(schedule_id)
         return result

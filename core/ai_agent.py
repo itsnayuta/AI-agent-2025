@@ -15,7 +15,7 @@ class AIAgent:
         self.advisor = ScheduleAdvisor()
     
     def process_user_input(self, user_input: str) -> str:
-        print("🔄 Đang xử lý yêu cầu...")
+        print("Đang xử lý yêu cầu...")
         
         try:
             system_prompt = self._build_system_prompt(user_input)
@@ -23,24 +23,24 @@ class AIAgent:
             function_call = self.gemini_service.extract_function_call(response)
             
             if function_call:
-                print(f"🔍 DEBUG Gemini function call:")
-                print(f"   Function: {function_call.name}")
-                print(f"   Args: {dict(function_call.args) if hasattr(function_call, 'args') else 'No args'}")
+                print(f"DEBUG Gemini function call:")
+                print(f"Function: {function_call.name}")
+                print(f"Args: {dict(function_call.args) if hasattr(function_call, 'args') else 'No args'}")
                 
                 function_response = self.function_handler.handle_function_call(function_call, user_input)
-                print("🤖 Gemini AI Response:")
+                print("Gemini AI Response:")
                 print(function_response)
                 return function_response
             else:
-                print("📋 Gemini không gọi function, sử dụng logic trực tiếp...")
+                print("Gemini không gọi function, sử dụng logic trực tiếp...")
                 return self._handle_direct_response(user_input)
                 
         except GeminiAPIError as e:
-            error_msg = f"❌ Lỗi Gemini API: {e}"
+            error_msg = f"Lỗi Gemini API: {e}"
             print(error_msg)
             return error_msg
         except Exception as e:
-            error_msg = f"❌ Lỗi hệ thống: {e}"
+            error_msg = f"Lỗi hệ thống: {e}"
             print(error_msg)
             return error_msg
     
