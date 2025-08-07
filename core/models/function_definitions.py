@@ -18,19 +18,31 @@ def get_function_definitions() -> List[Dict[str, Any]]:
             }
         },
         {
-            "name": "smart_add_schedule",
-            "description": "Thêm lịch thông minh, tự động phân tích thời gian từ ngôn ngữ tự nhiên rồi thêm vào hệ thống",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "user_request": {
-                        "type": "string",
-                        "description": "Yêu cầu thêm lịch bằng ngôn ngữ tự nhiên (VD: 'thêm lịch khám răng vào 7h tối thứ 7 tuần này, thời gian 2 tiếng')"
-                    }
-                },
-                "required": ["user_request"]
+    "name": "smart_add_schedule",
+    "description": "Thêm lịch thông minh, tự động phân tích thời gian từ ngôn ngữ tự nhiên rồi thêm vào hệ thống",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "title": {
+                "type": "string",
+                "description": "Tiêu đề ngắn gọn của lịch trình, ví dụ: 'Đi ăn cua' hoặc 'Họp team'"
+            },
+            "description": {
+                "type": "string",
+                "description": "Mô tả chi tiết của lịch trình, có thể bao gồm địa điểm, chi tiết công việc, v.v."
+            },
+            "start_time": {
+                "type": "string",
+                "description": "Thời gian bắt đầu của lịch trình theo định dạng ISO 8601 (VD: 2025-08-08T19:00:00). Nếu không tìm thấy, để trống."
+            },
+            "end_time": {
+                "type": "string",
+                "description": "Thời gian kết thúc của lịch trình theo định dạng ISO 8601 (VD: 2025-08-08T21:00:00). Nếu không tìm thấy, để trống."
             }
         },
+        "required": ["title", "start_time"]
+    }
+},
         {
             "name": "get_schedules",
             "description": "Lấy danh sách tất cả lịch đã lưu.",
