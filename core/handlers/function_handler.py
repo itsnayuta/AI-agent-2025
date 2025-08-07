@@ -58,19 +58,26 @@ class FunctionCallHandler:
         print(f"   ✅ Parsed time: {suggested_time}")
         
         # 2. Trích xuất thông tin từ yêu cầu
-        title = self._extract_title(user_request)
+        #title = self._extract_title(user_request)
+        title = args.get('title', user_request)
         
-        # 3. Trích xuất khoảng thời gian từ yêu cầu
+        # 3. Trích description từ yêu cầu (nếu có)
+        description = args.get('description', user_request)
+        if not description:
+            description = title
+        
+        
+        # 4. Trích xuất khoảng thời gian từ yêu cầu
         end_time = self._calculate_end_time(user_request, suggested_time)
 
-        # 4. Định dạng thời gian
+        # 5. Định dạng thời gian
         start_time_str = suggested_time.strftime('%Y-%m-%dT%H:%M:%S')
         end_time_str = end_time.strftime('%Y-%m-%dT%H:%M:%S')
         
         print(f"   ✅ Final times: {start_time_str} - {end_time_str}")
 
-        # 5. Thêm vào database
-        result = executor.add_schedule(title, title, start_time_str, end_time_str)
+        # 6. Thêm vào database
+        result = executor.add_schedule(title, description, start_time_str, end_time_str)
         return result
     
     def _handle_get_schedules(self, executor: ExecuteSchedule) -> str:
