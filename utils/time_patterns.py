@@ -1,6 +1,4 @@
-import re
 from datetime import datetime, timedelta
-from typing import Optional
 
 def parse_weekday(match, current_time, weekday_map):
     weekday_str = match.group(1).lower().replace(' ', '')

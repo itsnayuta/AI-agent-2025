@@ -1,11 +1,10 @@
 # Main AI Agent class
-from datetime import datetime
+from datetime import datetime, timedelta
 from core.services.gemini_service import GeminiService
 from core.handlers.function_handler import FunctionCallHandler
 from core.models.function_definitions import get_function_definitions
 from core.services.ScheduleAdvisor import ScheduleAdvisor
 from core.exceptions import GeminiAPIError
-from datetime import datetime, timedelta
 
 class AIAgent:
     def __init__(self):

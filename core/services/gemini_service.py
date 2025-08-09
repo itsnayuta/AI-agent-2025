@@ -2,7 +2,7 @@
 import google.generativeai as genai
 import threading
 import queue
-from typing import Dict, Any, Optional
+from typing import Any
 from core.config import Config
 from core.exceptions import GeminiAPIError
 

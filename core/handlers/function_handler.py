@@ -1,9 +1,8 @@
 # Function call handler
 import re
-from typing import Dict, Any, Optional
+from typing import Dict
 from core.services.ScheduleAdvisor import ScheduleAdvisor
 from core.services.ExecuteSchedule import ExecuteSchedule
-from core.exceptions import ValidationError, DatabaseError
 
 
 class FunctionCallHandler:
