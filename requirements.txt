@@ -1,3 +1,5 @@
+fastapi
+pydantic
 google-generativeai
 python-dotenv
 google-api-python-client

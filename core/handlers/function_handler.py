@@ -78,18 +78,33 @@ class FunctionCallHandler:
         # 6. Thêm vào database
         result = executor.add_schedule(title, description, start_time_str, end_time_str)
         return result
-    
-    def _handle_get_schedules(self, executor: ExecuteSchedule) -> str:
-        """Xử lý yêu cầu lấy danh sách lịch"""
+
+    def _handle_get_schedules(self, executor: ExecuteSchedule) -> dict:
+        """Xử lý yêu cầu lấy danh sách lịch và trả về dưới dạng JSON."""
         schedules = executor.get_schedules()
+
         if not schedules:
-            return "Hiện tại chưa có lịch nào được lưu."
-        
-        result = "**Danh sách lịch:**\n"
+            return {
+                "message": "Hiện tại chưa có lịch nào được lưu.",
+                "schedules": []
+            }
+
+        # Structure the data into a list of dictionaries
+        schedule_list = []
         for schedule in schedules:
-            result += f"ID: {schedule[0]} | {schedule[1]} | {schedule[3]} - {schedule[4]}\n"
-            result += f"   Mô tả: {schedule[2]}\n\n"
-        return result
+            schedule_item = {
+                "id": schedule[0],
+                "title": schedule[1],
+                "description": schedule[2],
+                "start_time": schedule[3],
+                "end_time": schedule[4]
+            }
+            schedule_list.append(schedule_item)
+
+        return {
+            "message": "Danh sách lịch đã được lấy thành công.",
+            "schedules": schedule_list
+        }
     
     def _handle_update_schedule(self, args: Dict, executor: ExecuteSchedule) -> str:
         """Xử lý yêu cầu cập nhật lịch"""
