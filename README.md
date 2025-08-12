@@ -74,7 +74,8 @@ pip install -r requirements.txt
    - **User support email**: email của bạn
    - **Developer contact**: email của bạn
 4. Thêm **Scopes**: `../auth/calendar`
-5. Thêm **Test users**: email tài khoản Google bạn muốn test
+5. Vào **Audience** để publish app 
+6. Thêm **Test users**: email tài khoản Google bạn muốn test
 
 ### Bước 7: Tạo thư mục database
 ```bash
@@ -85,8 +86,10 @@ mkdir database
 
 ### Khởi chạy ứng dụng
 ```bash
-python main.py
+uvicorn main:app --reload
 ```
+
+Khi máy chủ đang chạy, bạn có thể truy cập tài liệu API tương tác tại http://localhost:8000/docs để kiểm tra tất cả các endpoint.
 
 ### Các lệnh mẫu bằng tiếng Việt
 
@@ -103,10 +106,17 @@ thêm lịch họp vào 9h sáng mai
 tạo lịch học tiếng anh 7h tối thứ 3 tuần sau
 ```
 
+#### Tư vấn thời gian
+```
+khi nào phù hợp để họp với khách hàng?
+thời gian tốt nhất để phỏng vấn là khi nào?
+```
+
 #### Thoát chương trình
 ```
 exit
 quit
+thoát
 ```
 
 ## 📁 Cấu Trúc Dự Án
