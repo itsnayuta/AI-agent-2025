@@ -103,17 +103,10 @@ thêm lịch họp vào 9h sáng mai
 tạo lịch học tiếng anh 7h tối thứ 3 tuần sau
 ```
 
-#### Tư vấn thời gian
-```
-khi nào phù hợp để họp với khách hàng?
-thời gian tốt nhất để phỏng vấn là khi nào?
-```
-
 #### Thoát chương trình
 ```
 exit
 quit
-thoát
 ```
 
 ## 📁 Cấu Trúc Dự Án
