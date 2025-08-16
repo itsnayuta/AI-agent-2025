@@ -4,6 +4,7 @@ from core.services.gemini_service import GeminiService
 from core.handlers.function_handler import FunctionCallHandler
 from core.models.function_definitions import get_function_definitions
 from core.services.ScheduleAdvisor import ScheduleAdvisor
+from core.notification import get_notification_manager
 from core.exceptions import GeminiAPIError
 
 class AIAgent:
@@ -12,9 +13,18 @@ class AIAgent:
         self.function_handler = FunctionCallHandler()
         self.functions = get_function_definitions()
         self.advisor = ScheduleAdvisor()
+        self.notification_manager = get_notification_manager()
     
     def process_user_input(self, user_input: str) -> str:
         print("Đang xử lý yêu cầu...")
+        
+        # Kiểm tra xem có phải lệnh thiết lập email không
+        email_command_result = self.notification_manager.process_user_input(user_input)
+        if email_command_result['is_email_command']:
+            if email_command_result['success']:
+                return f"✓ {email_command_result['message']}"
+            else:
+                return f"{email_command_result['message']}"
         
         try:
             system_prompt = self._build_system_prompt(user_input)
