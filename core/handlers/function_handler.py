@@ -37,7 +37,16 @@ class FunctionCallHandler:
     def _handle_advise_schedule(self, args: Dict, user_input: str) -> str:
         """Xử lý tư vấn lịch"""
         user_request = args.get('user_request', user_input)
-        result = self.advisor.advise_schedule(user_request)
+        preferred_time_of_day = args.get('preferred_time_of_day')
+        duration = args.get('duration')
+        priority = args.get('priority')
+
+        result = self.advisor.advise_schedule(
+            user_request=user_request,
+            preferred_time_of_day=preferred_time_of_day,
+            duration=duration,
+            priority=priority
+        )
         return self.advisor.format_response(result)
     
     def _handle_smart_add_schedule(self, args: Dict, user_input: str, executor: ExecuteSchedule) -> str:
