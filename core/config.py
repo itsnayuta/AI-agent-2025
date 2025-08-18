@@ -24,11 +24,14 @@ class Config:
         'host': 'smtp.gmail.com',
         'port': 587,
         'user': os.getenv('SMTP_USER', ''),
-        'password': os.getenv('SMTP_PASSWORD', ''),
-        'to': os.getenv('SMTP_TO', '')
+        'password': os.getenv('SMTP_PASSWORD', '')
     }
     
     # Time Settings
     WORK_TIME = (8, 17)
     LUNCH_TIME = (12, 13)
-    DEFAULT_DURATION = 60 
+    DEFAULT_DURATION = 60
+    
+    # Notification Settings
+    SCAN_INTERVAL = 60  # seconds
+    REMINDER_MINUTES = 15  # minutes
