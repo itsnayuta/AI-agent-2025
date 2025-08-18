@@ -95,5 +95,19 @@ def get_function_definitions() -> List[Dict[str, Any]]:
                 },
                 "required": ["schedule_id"]
             }
+        },
+        {
+            "name": "setup_notification_email",
+            "description": "Thiết lập email nhận thông báo lịch trình.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "description": "Địa chỉ email để nhận thông báo"
+                    }
+                },
+                "required": ["email"]
+            }
         }
     ]
