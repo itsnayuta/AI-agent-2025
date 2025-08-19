@@ -1,6 +1,11 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from starlette.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
+from fastapi import Request
+
+from core.routers import schedule_router
 from contextlib import asynccontextmanager
-from core.routers.schedule_router import router as schedule_router_router
 from core.notification import get_notification_manager
 
 @asynccontextmanager
@@ -24,8 +29,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-app.include_router(schedule_router_router)
+# Mount static files (CSS, JS...)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
-@app.get("/")
-def read_root():
-    return {"message": "Welcome to the scheduling API!"}
+# Templates
+templates = Jinja2Templates(directory="templates")
+
+# Include API router
+app.include_router(schedule_router.router)
+
+@app.get("/", response_class=HTMLResponse)
+def read_root(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
