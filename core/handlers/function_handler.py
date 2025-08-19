@@ -3,11 +3,13 @@ import re
 from typing import Dict
 from core.services.ScheduleAdvisor import ScheduleAdvisor
 from core.services.ExecuteSchedule import ExecuteSchedule
+from core.notification import get_notification_manager
 
 
 class FunctionCallHandler:
     def __init__(self):
         self.advisor = ScheduleAdvisor()
+        self.notification_manager = get_notification_manager()
     
     def handle_function_call(self, call, user_input: str) -> str:
         """Xử lý các hàm cho Agent AI"""
@@ -27,6 +29,8 @@ class FunctionCallHandler:
                 return self._handle_update_schedule(args, executor)
             elif name == "delete_schedule":
                 return self._handle_delete_schedule(args, executor)
+            elif name == "setup_notification_email":
+                return self._handle_setup_notification_email(args)
             else:
                 return "Chức năng không hỗ trợ."
         except Exception as e:
@@ -37,7 +41,16 @@ class FunctionCallHandler:
     def _handle_advise_schedule(self, args: Dict, user_input: str) -> str:
         """Xử lý tư vấn lịch"""
         user_request = args.get('user_request', user_input)
-        result = self.advisor.advise_schedule(user_request)
+        preferred_time_of_day = args.get('preferred_time_of_day')
+        duration = args.get('duration')
+        priority = args.get('priority')
+
+        result = self.advisor.advise_schedule(
+            user_request=user_request,
+            preferred_time_of_day=preferred_time_of_day,
+            duration=duration,
+            priority=priority
+        )
         return self.advisor.format_response(result)
     
     def _handle_smart_add_schedule(self, args: Dict, user_input: str, executor: ExecuteSchedule) -> str:
@@ -128,6 +141,18 @@ class FunctionCallHandler:
         
         result = executor.delete_schedule(schedule_id)
         return result
+    
+    def _handle_setup_notification_email(self, args: Dict) -> str:
+        """Xử lý thiết lập email nhận thông báo"""
+        email = args.get('email')
+        if not email:
+            return "Thiếu địa chỉ email."
+        
+        result = self.notification_manager.setup_email(email)
+        if result['success']:
+            return f"Đã thiết lập email nhận thông báo: {email}"
+        else:
+            return f"Lỗi khi thiết lập email: {result['message']}"
     
     def _extract_title(self, user_request: str) -> str:
         """Trích xuất thông tin từ yêu cầu của người dùng"""

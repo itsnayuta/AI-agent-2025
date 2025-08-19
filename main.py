@@ -5,8 +5,29 @@ from fastapi.responses import HTMLResponse
 from fastapi import Request
 
 from core.routers import schedule_router
+from contextlib import asynccontextmanager
+from core.notification import get_notification_manager
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Khởi động hệ thống notification
+    notification_manager = get_notification_manager()
+    init_result = notification_manager.initialize()
+    
+    if init_result['success']:
+        print("Ứng dụng đã khởi động hoàn tất!")
+    else:
+        print(f"Lỗi khởi tạo notification: {init_result.get('message', 'Unknown error')}")
+    
+    yield
+    
+    # Shutdown: Tắt hệ thống notification
+    shutdown_result = notification_manager.shutdown()
+    if shutdown_result['success']:
+        print("Ứng dụng đã tắt!")
+    
+
+app = FastAPI(lifespan=lifespan)
 
 # Mount static files (CSS, JS...)
 app.mount("/static", StaticFiles(directory="static"), name="static")

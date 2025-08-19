@@ -74,9 +74,48 @@ pip install -r requirements.txt
    - **User support email**: email của bạn
    - **Developer contact**: email của bạn
 4. Thêm **Scopes**: `../auth/calendar`
-5. Thêm **Test users**: email tài khoản Google bạn muốn test
+5. Vào **Audience** để publish app 
+6. Thêm **Test users**: email tài khoản Google bạn muốn test
 
-### Bước 7: Tạo thư mục database
+### Bước 7: Thiết lập Email Notification (SMTP)
+> 🔔 Cấu hình để nhận thông báo email 15 phút trước mỗi lịch hẹn
+
+#### 7.1. Tạo Gmail App Password
+1. **Bật 2-Factor Authentication** cho Gmail:
+   - Vào [Google Account Settings](https://myaccount.google.com/)
+   - Chọn **Security** → **2-Step Verification**
+   - Bật **2-Step Verification** nếu chưa có
+
+2. **Tạo App Password**:
+   - Vào **Security** → **App passwords**
+   - Chọn **Select app** → **Mail**
+   - Chọn **Select device** → **Other (custom name)**
+   - Nhập tên: `AI Agent Schedule`
+   - Click **Generate**
+   - **Sao chép** password 16 ký tự (ví dụ: `abcd efgh ijkl mnop`)
+
+#### 7.2. Cập nhật file .env
+Thêm cấu hình SMTP vào file `.env`:
+```env
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# SMTP Configuration for Gmail
+SMTP_USER=your_email@gmail.com
+SMTP_PASSWORD=your_16_digit_app_password
+```
+
+**Lưu ý quan trọng:**
+- `SMTP_USER`: Email Gmail của bạn
+- `SMTP_PASSWORD`: App password 16 ký tự (KHÔNG phải password Gmail thường)
+- Email nhận thông báo sẽ được setup qua API sau khi khởi động ứng dụng
+
+#### 7.3. Test Email Configuration
+Sau khi khởi động ứng dụng, bạn có thể test email:
+1. Vào http://127.0.0.1:8000/docs
+2. Sử dụng endpoint `POST /schedules/test-email`
+3. Nhập email muốn test: `{"email": "your_test_email@gmail.com"}`
+
+### Bước 8: Tạo thư mục database
 ```bash
 mkdir database
 ```
@@ -85,9 +124,8 @@ mkdir database
 
 ### Khởi chạy ứng dụng
 ```bash
-python main.py
+uvicorn main:app --reload
 ```
-
 ### Các lệnh mẫu bằng tiếng Việt
 
 #### Xem lịch hiện tại
@@ -119,7 +157,7 @@ thoát
 ## 📁 Cấu Trúc Dự Án
 
 ```
-📁 AI-agent-2025/
+📁 Agent-Schedule-Management/
 ├── 📄 main.py                    # Entry point chính
 ├── 📁 core/                      # Core modules
 │   ├── 📄 config.py             # Cấu hình tập trung
@@ -133,6 +171,12 @@ thoát
 │   │   └── 📄 function_handler.py # Xử lý function calls
 │   ├── 📁 models/               # Data models
 │   │   └── 📄 function_definitions.py # AI function schemas
+│   ├── 📁 notification/         # Email notification system
+│   │   ├── 📄 NotificationManager.py # Quản lý notification
+│   │   ├── 📄 NotificationScheduler.py # Background scheduler
+│   │   └── 📄 NotificationCore.py # Core services
+│   ├── 📁 routers/              # FastAPI routers
+│   │   └── 📄 schedule_router.py # API endpoints
 │   └── 📁 OAuth/                # Google credentials
 │       └── 📄 credentials.json  # (Bạn tự tạo)
 ├── 📁 utils/                    # Utilities
@@ -140,29 +184,10 @@ thoát
 │   └── 📄 task_categories.py   # Phân loại công việc
 ├── 📁 database/                 # SQLite database
 ├── 📁 test/                     # Test scripts
+├── 📄 .env                      # Biến môi trường (bạn tự tạo)
+├── 📄 SETUP_EMAIL.md           # Hướng dẫn setup email
 └── 📄 requirements.txt          # Dependencies
 ```
 
-## 🔧 Xử Lý Sự Cố
 
-### Lỗi Gemini API
-```
-❌ Lỗi Gemini API: 429 You exceeded your current quota
-```
-**Giải pháp**: Đợi 24h hoặc nâng cấp gói Gemini API
-
-### Lỗi Google Calendar
-```
-🔶 Đồng bộ Google Calendar thất bại: access_denied
-```
-**Giải pháp**: 
-1. Kiểm tra file `credentials.json` có đúng vị trí
-2. Thêm email vào Test users trong OAuth consent screen
-3. Xóa file `token.pickle` và đăng nhập lại
-
-### Lỗi Database
-```
-❌ Lỗi khi thêm lịch: Cannot operate on a closed database
-```
-**Giải pháp**: Khởi động lại ứng dụng
 
