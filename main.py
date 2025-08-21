@@ -4,7 +4,6 @@ from starlette.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from fastapi import Request
 
-import os
 from core.routers import schedule_router
 from contextlib import asynccontextmanager
 import threading
@@ -36,7 +35,6 @@ async def lifespan(app: FastAPI):
                             raise RuntimeError("pyngrok chưa được cài hoặc import thất bại")
                         if Config.NGROK_AUTHTOKEN:
                             _ngrok.set_auth_token(Config.NGROK_AUTHTOKEN)
-                        # Trỏ trực tiếp tới IPv4 để tránh ::1
                         tunnel = _ngrok.connect("http://127.0.0.1:8000", bind_tls=True)
                         public_base_url = tunnel.public_url
                         app.state._ngrok_tunnel = tunnel
@@ -45,7 +43,6 @@ async def lifespan(app: FastAPI):
                         print(f"[Dev] Không thể khởi động ngrok: {ngrok_err}")
 
                 def _deferred_start_watch_and_sync(url: str):
-                    # Đợi server bắt đầu listen rồi mới đăng ký watch để tránh lỗi kết nối
                     time.sleep(2)
                     try:
                         cb = url.rstrip('/') + "/schedules/google/webhook"
@@ -54,6 +51,8 @@ async def lifespan(app: FastAPI):
                     except Exception as e:
                         print(f"[Google] Watch start error: {e}")
                     try:
+                        backfill = svc.backfill_upcoming_days(days=30)
+                        print(f"[Google] Backfill upcoming 30d: {backfill}")
                         sync_info = svc.sync_from_google()
                         print(f"[Google] Initial sync: {sync_info}")
                     except Exception as e:
@@ -69,12 +68,9 @@ async def lifespan(app: FastAPI):
         print(f"Lỗi khởi tạo notification: {init_result.get('message', 'Unknown error')}")
     
     yield
-    
-    # Shutdown: Tắt hệ thống notification
     shutdown_result = notification_manager.shutdown()
     if shutdown_result['success']:
         print("Ứng dụng đã tắt!")
-    # Shutdown: đóng ngrok nếu có
     try:
         tunnel = getattr(app.state, '_ngrok_tunnel', None)
         if tunnel is not None and _ngrok is not None:
