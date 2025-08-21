@@ -60,6 +60,13 @@ async def google_webhook(
     trigger incremental sync.
     """
     svc = GoogleCalendarService()
+    print({
+        "webhook": "received",
+        "channel": x_goog_channel_id,
+        "resource": x_goog_resource_id,
+        "state": x_goog_resource_state,
+        "msg": x_goog_message_number
+    })
     state = svc.get_sync_state()
     if state.get('channel_id') and state.get('channel_id') != x_goog_channel_id:
         return {"status": "ignored", "reason": "channel mismatch"}

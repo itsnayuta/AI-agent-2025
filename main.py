@@ -58,6 +58,18 @@ async def lifespan(app: FastAPI):
                     except Exception as e:
                         print(f"[Google] Initial sync error: {e}")
 
+                    # Fallback: sync định kỳ mỗi 60s để bắt thay đổi nếu webhook không đến
+                    def _periodic_sync():
+                        while True:
+                            try:
+                                res = svc.sync_from_google()
+                                print(f"[Google] Periodic sync: {res}")
+                            except Exception as err:
+                                print(f"[Google] Periodic sync error: {err}")
+                            time.sleep(60)
+
+                    threading.Thread(target=_periodic_sync, daemon=True, name="GooglePeriodicSync").start()
+
                 if public_base_url:
                     threading.Thread(target=_deferred_start_watch_and_sync, args=(public_base_url,), daemon=True).start()
                 else:
