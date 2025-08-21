@@ -7,6 +7,7 @@ from core.dependencies import get_ai_agent
 from core.models.schema import Prompt
 from core.notification import get_notification_manager
 from core.services.google_calendar_service import GoogleCalendarService
+from core.config import Config
 
 router = APIRouter(
     prefix="/schedules",
@@ -42,8 +43,23 @@ def test_email(request: EmailSetupRequest):
 
 @router.post("/google/watch/start")
 def start_google_watch(request: Request):
-    """Khởi tạo Google Calendar watch webhook và lưu channel vào DB."""
-    base_url = str(request.base_url).rstrip('/')
+    """Khởi tạo Google Calendar watch webhook và lưu channel vào DB.
+    Ưu tiên PUBLIC_BASE_URL hoặc URL ngrok đang chạy; nếu chỉ có HTTP localhost thì từ chối.
+    """
+    # Ưu tiên cấu hình tĩnh
+    base_url = Config.PUBLIC_BASE_URL
+    # Nếu không có, thử lấy từ ngrok đã khởi động trong app state
+    if not base_url:
+        tunnel = getattr(request.app.state, '_ngrok_tunnel', None)
+        if tunnel is not None:
+            base_url = tunnel.public_url
+    # Cuối cùng mới fallback theo request hiện tại
+    if not base_url:
+        base_url = str(request.base_url).rstrip('/')
+
+    if base_url.startswith('http://'):
+        return {"error": "Callback URL phải là HTTPS để đăng ký webhook với Google. Hãy đặt PUBLIC_BASE_URL (HTTPS) hoặc dùng ngrok."}
+
     callback_url = f"{base_url}/schedules/google/webhook"
     svc = GoogleCalendarService()
     result = svc.start_watch(callback_url)
@@ -65,6 +81,30 @@ def manual_google_sync():
     return {"message": "Synced", "result": result}
 
 
+@router.post("/google/sync/reset-token")
+def reset_google_sync_token():
+    """Xóa syncToken để ép đồng bộ lại từ đầu (sẽ dùng updatedMin ~ 30 ngày)."""
+    svc = GoogleCalendarService()
+    svc.reset_sync_token()
+    return {"message": "Sync token reset"}
+
+
+@router.get("/google/backfill")
+def backfill_google_events(date: str):
+    """
+    Backfill sự kiện theo ngày (YYYY-MM-DD). Lấy từ 00:00:00 đến 23:59:59 theo UTC.
+    Gợi ý: dùng cho các sự kiện cũ chưa về DB local.
+    """
+    from datetime import datetime, timedelta
+    # timeMin/timeMax phải theo RFC3339 và có Z (UTC)
+    d = datetime.fromisoformat(date)
+    t_min = d.replace(hour=0, minute=0, second=0, microsecond=0).isoformat() + 'Z'
+    t_max = (d + timedelta(days=1) - timedelta(seconds=1)).isoformat() + 'Z'
+    svc = GoogleCalendarService()
+    result = svc.backfill_range(t_min, t_max)
+    return {"message": "Backfill done", "result": result}
+
+
 @router.post("/google/webhook")
 async def google_webhook(
     request: Request,
@@ -79,7 +119,6 @@ async def google_webhook(
     """
     svc = GoogleCalendarService()
     state = svc.get_sync_state()
-ư
     if state.get('channel_id') and state.get('channel_id') != x_goog_channel_id:
         return {"status": "ignored", "reason": "channel mismatch"}
     if state.get('resource_id') and state.get('resource_id') != x_goog_resource_id:

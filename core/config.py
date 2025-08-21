@@ -18,6 +18,9 @@ class Config:
     GOOGLE_CREDENTIALS_PATH = os.getenv('GOOGLE_CREDENTIALS_PATH', 'core/OAuth/credentials.json')
     GOOGLE_SCOPES = ['https://www.googleapis.com/auth/calendar']
     TOKEN_PATH = 'token.pickle'
+    PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL') 
+    AUTO_GOOGLE_SYNC = 'true'
+    NGROK_AUTHTOKEN = os.getenv('NGROK_AUTHTOKEN')
     
     # SMTP Settings
     SMTP_CONFIG = {

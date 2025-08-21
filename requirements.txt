@@ -8,3 +8,4 @@ google-auth-oauthlib
 uvicorn
 jinja2
 aiofiles
+pyngrok

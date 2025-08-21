@@ -276,4 +276,33 @@ class GoogleCalendarService:
         finally:
             conn.close()
 
+    # ------------- Backfill & Sync Control -------------
+    def backfill_range(self, time_min_iso: str, time_max_iso: str, calendar_id: str = 'primary') -> Dict[str, Any]:
+        service = self._build_service()
+        page_token = None
+        total = 0
+        while True:
+            kwargs: Dict[str, Any] = {
+                'calendarId': calendar_id,
+                'timeMin': time_min_iso,
+                'timeMax': time_max_iso,
+                'singleEvents': True,
+                'showDeleted': True,
+                'maxResults': 2500,
+            }
+            if page_token:
+                kwargs['pageToken'] = page_token
+            resp = service.events().list(**kwargs).execute()
+            items = resp.get('items', [])
+            for ev in items:
+                self._upsert_local_from_google_event(ev)
+                total += 1
+            page_token = resp.get('nextPageToken')
+            if not page_token:
+                break
+        return {'backfilled': total, 'timeMin': time_min_iso, 'timeMax': time_max_iso}
+
+    def reset_sync_token(self):
+        self._update_sync_state(next_sync_token=None)
+
 
