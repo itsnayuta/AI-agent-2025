@@ -305,4 +305,13 @@ class GoogleCalendarService:
     def reset_sync_token(self):
         self._update_sync_state(next_sync_token=None)
 
+    def backfill_upcoming_days(self, days: int = 30, calendar_id: str = 'primary') -> Dict[str, Any]:
+        """
+        Backfill tất cả sự kiện từ thời điểm hiện tại đến N ngày tới.
+        """
+        now_utc = datetime.datetime.utcnow().replace(microsecond=0)
+        time_min_iso = now_utc.isoformat() + 'Z'
+        time_max_iso = (now_utc + datetime.timedelta(days=days)).isoformat() + 'Z'
+        return self.backfill_range(time_min_iso, time_max_iso, calendar_id=calendar_id)
+
 
