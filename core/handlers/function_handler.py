@@ -1,9 +1,32 @@
 # Function call handler
+import random
 import re
 from typing import Dict
 from core.services.ScheduleAdvisor import ScheduleAdvisor
 from core.services.ExecuteSchedule import ExecuteSchedule
 from core.notification import get_notification_manager
+
+
+def _handle_irrelevant_input(user_input: str) -> str | None:
+    user_input_lower = user_input.lower().strip()
+    scheduling_keywords = [
+        "lịch", "lịch trình", "cuộc hẹn", "sự kiện", "công việc", "kế hoạch",
+        "nhắc", "đặt", "tạo", "thêm", "xóa", "sửa", "cập nhật", "hủy",
+        "kiểm tra", "xem", "tìm", "liệt kê", "tư vấn", "gợi ý",
+        "hôm nay", "ngày mai", "ngày kia", "tuần này", "tuần sau", "tháng này",
+        "thứ hai", "thứ ba", "giờ", "phút"
+    ]
+
+    is_relevant = any(word in user_input_lower for word in scheduling_keywords)
+
+    if not is_relevant:
+        irrelevant_responses = [
+            "Xin lỗi, tôi chưa hiểu rõ yêu cầu của bạn. Chuyên môn của tôi là hỗ trợ quản lý lịch trình. Bạn có muốn đặt một lịch hẹn không?",
+            "Tôi có thể chưa được lập trình để xử lý yêu cầu này. Bạn có thể thử yêu cầu tôi 'thêm lịch đi khám răng vào 3 giờ chiều mai' không?",
+            "Rất tiếc, tôi chỉ có thể giúp bạn các vấn đề liên quan đến lịch trình, cuộc hẹn và công việc. Bạn cần tôi giúp gì trong phạm vi này không?"
+        ]
+        return random.choice(irrelevant_responses)
+    return None
 
 
 class FunctionCallHandler:
@@ -39,6 +62,10 @@ class FunctionCallHandler:
             executor.close()
     
     def _handle_advise_schedule(self, args: Dict, user_input: str) -> str:
+        irrelevant_response = _handle_irrelevant_input(user_input)
+        if irrelevant_response:
+            return f"[Trợ lý]: {irrelevant_response}"
+
         """Xử lý tư vấn lịch"""
         user_request = args.get('user_request', user_input)
         preferred_time_of_day = args.get('preferred_time_of_day')
@@ -52,7 +79,7 @@ class FunctionCallHandler:
             priority=priority
         )
         return self.advisor.format_response(result)
-    
+
     def _handle_smart_add_schedule(self, args: Dict, user_input: str, executor: ExecuteSchedule) -> str:
         """Xử lý thêm lịch thông minh"""
         user_request = args.get('user_request', user_input)
