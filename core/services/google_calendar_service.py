@@ -9,6 +9,8 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
+import time
+import socket
 
 
 class GoogleCalendarService:
@@ -17,6 +19,12 @@ class GoogleCalendarService:
         self.SCOPES = ['https://www.googleapis.com/auth/calendar']
         self.credentials_path = os.getenv(credentials_path_env, 'core/OAuth/credentials.json')
         self.token_path = 'token.pickle'
+        self._last_sync_ts: float = 0.0
+        self._sync_debounce_interval = 30  # seconds
+        
+        # Timeout settings
+        self._api_timeout = 30  # seconds for API calls
+        self._max_retries = 3
 
         self._ensure_sync_tables()
 
@@ -40,7 +48,11 @@ class GoogleCalendarService:
         if not os.path.exists(self.credentials_path):
             raise FileNotFoundError(f"Không tìm thấy file credentials: {self.credentials_path}")
         creds = self._load_credentials()
-        return build('calendar', 'v3', credentials=creds)
+        
+        # Configure socket timeout để tránh hanging
+        socket.setdefaulttimeout(self._api_timeout)
+        
+        return build('calendar', 'v3', credentials=creds, cache_discovery=False)
 
     # ------------- DB Helpers -------------
     def _get_conn(self) -> sqlite3.Connection:
@@ -141,43 +153,85 @@ class GoogleCalendarService:
     # ------------- Incremental Sync -------------
     def sync_from_google(self, calendar_id: str = 'primary') -> Dict[str, Any]:
         """
-        Kéo thay đổi từ Google về local bằng syncToken.
-        Nếu chưa có token → lần đầu sẽ lấy tất cả (có thể giới hạn thời gian bằng updatedMin nếu muốn).
+        Kéo thay đổi từ Google về local bằng syncToken với retry mechanism.
         """
+        current_time = time.time()
+        if current_time - self._last_sync_ts < self._sync_debounce_interval:
+            return {'synced': 0, 'changes': [], 'skipped': 'debounce'}
+        
+        for attempt in range(self._max_retries):
+            try:
+                result = self._do_sync_from_google(calendar_id)
+                self._last_sync_ts = current_time
+                return result
+                
+            except (socket.timeout, socket.error, ConnectionError) as e:
+                if attempt < self._max_retries - 1:
+                    wait_time = 2 ** attempt
+                    time.sleep(wait_time)
+                else:
+                    print(f"[Sync] Network timeout after {self._max_retries} attempts")
+                    return {'synced': 0, 'changes': [], 'error': 'network_timeout'}
+                    
+            except HttpError as e:
+                if e.resp is not None and e.resp.status in (410,):
+                    self._update_sync_state(next_sync_token=None)
+                    return self.sync_from_google(calendar_id=calendar_id)
+                else:
+                    print(f"[Sync] HTTP Error: {e}")
+                    return {'synced': 0, 'changes': [], 'error': str(e)}
+                    
+            except Exception as e:
+                print(f"[Sync] Error: {e}")
+                return {'synced': 0, 'changes': [], 'error': str(e)}
+
+    def _do_sync_from_google(self, calendar_id: str = 'primary') -> Dict[str, Any]:
+        """Thực hiện sync thực tế"""
         state = self._get_sync_state()
         token = state.get('next_sync_token')
         service = self._build_service()
 
         changes: List[Dict[str, Any]] = []
         page_token = None
-        try:
-            while True:
-                kwargs: Dict[str, Any] = {'calendarId': calendar_id, 'showDeleted': True, 'singleEvents': False, 'maxResults': 2500}
-                if token:
-                    kwargs['syncToken'] = token
-                else:
-                    updated_min = (datetime.datetime.utcnow() - datetime.timedelta(days=30)).isoformat() + 'Z'
-                    kwargs['updatedMin'] = updated_min
-                if page_token:
-                    kwargs['pageToken'] = page_token
+        
+        while True:
+            kwargs: Dict[str, Any] = {
+                'calendarId': calendar_id, 
+                'showDeleted': True, 
+                'singleEvents': True,
+                'maxResults': 250
+            }
+            if token:
+                kwargs['syncToken'] = token
+            else:
+                updated_min = (datetime.datetime.utcnow() - datetime.timedelta(days=7)).isoformat() + 'Z'
+                kwargs['updatedMin'] = updated_min
 
-                resp = service.events().list(**kwargs).execute()
-                items = resp.get('items', [])
-                for ev in items:
+            if page_token:
+                kwargs['pageToken'] = page_token
+
+            resp = service.events().list(**kwargs).execute()
+            items = resp.get('items', [])
+            
+            for ev in items:
+                try:
                     self._upsert_local_from_google_event(ev)
-                    changes.append({'id': ev.get('id'), 'status': ev.get('status')})
+                    changes.append({
+                        'id': ev.get('id'), 
+                        'status': ev.get('status'),
+                        'summary': ev.get('summary', '')[:30]
+                    })
+                except Exception as ev_error:
+                    print(f"[Sync] Event error {ev.get('id')}: {ev_error}")
 
-                page_token = resp.get('nextPageToken')
-                if not page_token:
-                    new_token = resp.get('nextSyncToken')
-                    if new_token:
-                        self._update_sync_state(next_sync_token=new_token, last_sync_at=datetime.datetime.utcnow().isoformat())
-                    break
-        except HttpError as e:
-            if e.resp is not None and e.resp.status in (410,):
-                self._update_sync_state(next_sync_token=None)
-                return self.sync_from_google(calendar_id=calendar_id)
-            print(f"[GoogleCalendar] Lỗi khi sync: {e}")
+            page_token = resp.get('nextPageToken')
+            if not page_token:
+                new_token = resp.get('nextSyncToken')
+                if new_token:
+                    from utils.timezone_utils import get_vietnam_timestamp
+                    self._update_sync_state(next_sync_token=new_token, last_sync_at=get_vietnam_timestamp())
+                break
+                
         return {'synced': len(changes), 'changes': changes}
 
     # ------------- Webhook -------------
@@ -228,8 +282,20 @@ class GoogleCalendarService:
 
         start_obj = event.get('start', {})
         end_obj = event.get('end', {})
-        start_dt = start_obj.get('dateTime') or (start_obj.get('date') + 'T00:00:00' if start_obj.get('date') else None)
-        end_dt = end_obj.get('dateTime') or (end_obj.get('date') + 'T23:59:59' if end_obj.get('date') else None)
+        
+        # Chuẩn hóa thời gian về múi giờ Việt Nam
+        from utils.timezone_utils import parse_time_to_vietnam, vietnam_isoformat
+        
+        start_time_raw = start_obj.get('dateTime') or (start_obj.get('date') + 'T00:00:00+07:00' if start_obj.get('date') else None)
+        end_time_raw = end_obj.get('dateTime') or (end_obj.get('date') + 'T23:59:59+07:00' if end_obj.get('date') else None)
+        
+        try:
+            start_dt = vietnam_isoformat(parse_time_to_vietnam(start_time_raw)) if start_time_raw else None
+            end_dt = vietnam_isoformat(parse_time_to_vietnam(end_time_raw)) if end_time_raw else None
+        except:
+            # Fallback to raw strings if parsing fails
+            start_dt = start_time_raw
+            end_dt = end_time_raw
 
         conn = self._get_conn()
         try:
@@ -268,10 +334,11 @@ class GoogleCalendarService:
                 ''', (summary, description, start_dt, end_dt, etag, updated, google_id))
             else:
                 # Create new row
+                from utils.timezone_utils import get_vietnam_timestamp
                 cur.execute('''
                     INSERT INTO schedules (title, description, start_time, end_time, created_at, google_event_id, google_etag, google_updated, deleted)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
-                ''', (summary, description, start_dt, end_dt, datetime.datetime.utcnow().isoformat(), google_id, etag, updated))
+                ''', (summary, description, start_dt, end_dt, get_vietnam_timestamp(), google_id, etag, updated))
             conn.commit()
         finally:
             conn.close()

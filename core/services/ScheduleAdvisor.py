@@ -39,8 +39,9 @@ class ScheduleAdvisor:
     phân tích yêu cầu của người dùng, kiểm tra lịch trống và đề xuất thời gian phù hợp.
     """
     def __init__(self, db_path='database/schedule.db'):
-        # Thiết lập thời gian hiện tại
-        self.current_time = datetime.now()
+        # Thiết lập thời gian hiện tại theo múi giờ Việt Nam
+        from utils.timezone_utils import get_vietnam_now
+        self.current_time = get_vietnam_now()
         
         # Thiết lập giờ làm việc và giờ nghỉ trưa
         self.business_hours = (8, 17) # 8h sáng đến 17h chiều

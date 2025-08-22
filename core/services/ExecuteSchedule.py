@@ -1,13 +1,8 @@
 import sqlite3
-import datetime
 import smtplib
 from email.message import EmailMessage
 import os
 from dotenv import load_dotenv
-from googleapiclient.discovery import build
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-import pickle
 from core.services.google_calendar_service import GoogleCalendarService
 
 class ExecuteSchedule:
@@ -73,7 +68,7 @@ class ExecuteSchedule:
             cursor.execute('''
                 INSERT INTO schedules (title, description, start_time, end_time, created_at)
                 VALUES (?, ?, ?, ?, ?)
-            ''', (title, description, start_time, end_time, datetime.datetime.now().isoformat()))
+            ''', (title, description, start_time, end_time, self._get_vietnam_timestamp()))
             self.conn.commit()
             new_id = cursor.lastrowid
             self.send_notification(f"Lịch mới: {title} lúc {start_time}")
@@ -174,24 +169,39 @@ class ExecuteSchedule:
 
     def validate_time(self, start_time, end_time, exclude_id=None):
         try:
-            start_dt = datetime.datetime.fromisoformat(start_time)
-            end_dt = datetime.datetime.fromisoformat(end_time)
+            from utils.timezone_utils import parse_time_to_vietnam
+            # Chuẩn hóa tất cả về múi giờ Việt Nam
+            start_dt = parse_time_to_vietnam(start_time)
+            end_dt = parse_time_to_vietnam(end_time)
             if start_dt >= end_dt:
                 return False
-        except Exception:
+        except Exception as e:
+            print(f"[Debug] validate_time parse error: {e}")
             return False
+        
         cursor = self.conn.cursor()
-        query = 'SELECT id, start_time, end_time FROM schedules'
+        query = 'SELECT id, start_time, end_time FROM schedules WHERE COALESCE(deleted, 0) = 0'
         cursor.execute(query)
         for row in cursor.fetchall():
             if exclude_id and row[0] == exclude_id:
                 continue
-            exist_start = datetime.datetime.fromisoformat(row[1])
-            exist_end = datetime.datetime.fromisoformat(row[2])
-            # Kiểm tra trùng thời gian
-            if (start_dt < exist_end and end_dt > exist_start):
-                return False
+            try:
+                # Chuẩn hóa timezone cho existing schedules về Việt Nam
+                exist_start = parse_time_to_vietnam(row[1])
+                exist_end = parse_time_to_vietnam(row[2])
+                # Kiểm tra trùng thời gian
+                if (start_dt < exist_end and end_dt > exist_start):
+                    print(f"[Debug] Time conflict: {start_time} conflicts with {row[1]} - {row[2]}")
+                    return False
+            except Exception as e:
+                print(f"[Debug] validate_time existing schedule error: {e}")
+                continue
         return True
+    
+    def _get_vietnam_timestamp(self):
+        """Lấy timestamp hiện tại theo múi giờ Việt Nam"""
+        from utils.timezone_utils import get_vietnam_timestamp
+        return get_vietnam_timestamp()
 
     def send_notification(self, message):
         print(f"[Thông báo] {message}")

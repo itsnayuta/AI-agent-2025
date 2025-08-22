@@ -47,26 +47,27 @@ async def lifespan(app: FastAPI):
                     try:
                         cb = url.rstrip('/') + "/schedules/google/webhook"
                         info = svc.start_watch(cb)
-                        print(f"[Google] Watch started: {info}")
+                        print(f"[Google] Watch started")
                     except Exception as e:
-                        print(f"[Google] Watch start error: {e}")
+                        print(f"[Google] Watch error: {e}")
                     try:
                         backfill = svc.backfill_upcoming_days(days=30)
-                        print(f"[Google] Backfill upcoming 30d: {backfill}")
+                        print(f"[Google] Backfilled {backfill.get('backfilled', 0)} events")
                         sync_info = svc.sync_from_google()
-                        print(f"[Google] Initial sync: {sync_info}")
+                        if sync_info.get('synced', 0) > 0:
+                            print(f"[Google] Initial sync: {sync_info['synced']} changes")
                     except Exception as e:
                         print(f"[Google] Initial sync error: {e}")
 
-                    # Fallback: sync định kỳ mỗi 60s để bắt thay đổi nếu webhook không đến
                     def _periodic_sync():
                         while True:
                             try:
+                                time.sleep(Config.PERIODIC_SYNC_INTERVAL)
                                 res = svc.sync_from_google()
-                                print(f"[Google] Periodic sync: {res}")
+                                if res.get('synced', 0) > 0:
+                                    print(f"[Google] Periodic: {res['synced']} changes")
                             except Exception as err:
-                                print(f"[Google] Periodic sync error: {err}")
-                            time.sleep(60)
+                                print(f"[Google] Periodic error: {err}")
 
                     threading.Thread(target=_periodic_sync, daemon=True, name="GooglePeriodicSync").start()
 
