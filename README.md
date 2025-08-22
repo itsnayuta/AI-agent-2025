@@ -32,6 +32,8 @@ pip install -r requirements.txt
 2. Chỉnh sửa file `.env` với thông tin của bạn:
    ```env
    GEMINI_API_KEY=your_gemini_api_key_here
+   GOOGLE_CREDENTIALS_PATH=core/OAuth/credentials.json
+   PUBLIC_BASE_URL=https://your-ngrok-url.ngrok-free.app
    ```
 
 ### Bước 5: Lấy Gemini API Key
@@ -40,8 +42,10 @@ pip install -r requirements.txt
 3. Nhấn **"Create API Key"**
 4. Sao chép API key và dán vào file `.env`
 
-### Bước 6: Thiết lập Google Calendar
+### Bước 6: Thiết lập Google Calendar & Two-way Sync
 > ⚠️ Tạo file theo đường dẫn: `core/OAuth/credentials.json`
+> 
+> 🔄 **Tính năng mới**: Đồng bộ hai chiều tự động với Google Calendar
 
 #### 6.1. Tạo Google Cloud Project
 1. Truy cập [Google Cloud Console](https://console.cloud.google.com/)
@@ -99,12 +103,18 @@ Thêm cấu hình SMTP vào file `.env`:
 ```env
 GEMINI_API_KEY=your_gemini_api_key_here
 
+# Google Calendar Configuration
+GOOGLE_CREDENTIALS_PATH=core/OAuth/credentials.json
+PUBLIC_BASE_URL=https://your-ngrok-url.ngrok-free.app
+
 # SMTP Configuration for Gmail
 SMTP_USER=your_email@gmail.com
 SMTP_PASSWORD=your_16_digit_app_password
 ```
 
 **Lưu ý quan trọng:**
+- `GOOGLE_CREDENTIALS_PATH`: Đường dẫn file OAuth credentials
+- `PUBLIC_BASE_URL`: URL public cho webhook (sử dụng ngrok cho dev)
 - `SMTP_USER`: Email Gmail của bạn
 - `SMTP_PASSWORD`: App password 16 ký tự (KHÔNG phải password Gmail thường)
 - Email nhận thông báo sẽ được setup qua API sau khi khởi động ứng dụng
@@ -126,6 +136,12 @@ mkdir database
 ```bash
 uvicorn main:app --reload
 ```
+
+> 🔄 **Auto Sync**: Hệ thống sẽ tự động:
+> - Thiết lập webhook với Google Calendar
+> - Đồng bộ events trong 30 ngày tới
+> - Duy trì sync thời gian thực (webhook + periodic)
+> - Chuẩn hóa tất cả thời gian về múi giờ Việt Nam (GMT+7)
 ### Các lệnh mẫu bằng tiếng Việt
 
 #### Xem lịch hiện tại
@@ -143,8 +159,7 @@ tạo lịch học tiếng anh 7h tối thứ 3 tuần sau
 
 #### Tư vấn thời gian
 ```
-khi nào phù hợp để họp với khách hàng?
-thời gian tốt nhất để phỏng vấn là khi nào?
+None
 ```
 
 #### Thoát chương trình
@@ -166,7 +181,8 @@ thoát
 │   ├── 📁 services/             # Business logic
 │   │   ├── 📄 gemini_service.py # Xử lý Gemini API
 │   │   ├── 📄 ScheduleAdvisor.py # Tư vấn lập lịch
-│   │   └── 📄 ExecuteSchedule.py # Thực thi lịch
+│   │   ├── 📄 ExecuteSchedule.py # Thực thi lịch
+│   │   └── 📄 google_calendar_service.py # Two-way sync với Google Calendar
 │   ├── 📁 handlers/             # Request handlers
 │   │   └── 📄 function_handler.py # Xử lý function calls
 │   ├── 📁 models/               # Data models
@@ -181,7 +197,8 @@ thoát
 │       └── 📄 credentials.json  # (Bạn tự tạo)
 ├── 📁 utils/                    # Utilities
 │   ├── 📄 time_patterns.py     # Pattern thời gian
-│   └── 📄 task_categories.py   # Phân loại công việc
+│   ├── 📄 task_categories.py   # Phân loại công việc
+│   └── 📄 timezone_utils.py    # Xử lý múi giờ Việt Nam
 ├── 📁 database/                 # SQLite database
 ├── 📁 test/                     # Test scripts
 ├── 📄 .env                      # Biến môi trường (bạn tự tạo)
