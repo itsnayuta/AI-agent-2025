@@ -164,16 +164,25 @@ class NotificationDatabaseService:
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
+            # Ensure schedules table exists
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS schedules (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT,
+                    description TEXT,
+                    start_time TEXT,
+                    end_time TEXT,
+                    created_at TEXT
+                )
+            ''')
             cursor.execute("PRAGMA table_info(schedules)")
             columns = [column[1] for column in cursor.fetchall()]
             
             if 'notified' not in columns:
                 cursor.execute('ALTER TABLE schedules ADD COLUMN notified INTEGER DEFAULT 0')
-                print("Đã thêm cột 'notified' vào bảng schedules")
             
             if 'notification_sent_at' not in columns:
                 cursor.execute('ALTER TABLE schedules ADD COLUMN notification_sent_at TEXT')
-                print("Đã thêm cột 'notification_sent_at' vào bảng schedules")
             
             conn.commit()
             conn.close()

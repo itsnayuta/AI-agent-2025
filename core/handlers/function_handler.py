@@ -59,36 +59,56 @@ class FunctionCallHandler:
         
         print(f"DEBUG smart_add_schedule:")
         print(f"user_request: {user_request}")
+        print(f"args: {args}")
         
-        # 1. Phân tích thời gian từ input
-        advisor_result = self.advisor.advise_schedule(user_request)
+        # 1. Ưu tiên sử dụng thời gian từ Gemini nếu có
+        start_time_str = args.get('start_time')
+        end_time_str = args.get('end_time')
         
-        if 'suggested_time' not in advisor_result:
-            return "Không thể phân tích thời gian từ yêu cầu của bạn."
+        if start_time_str:
+            # Gemini đã parse được thời gian
+            print(f"Using Gemini parsed time: {start_time_str}")
+            if not end_time_str:
+                # Tính toán end_time dựa trên start_time
+                from datetime import timedelta
+                from utils.timezone_utils import parse_time_to_vietnam, vietnam_isoformat
+                
+                # Parse và chuẩn hóa sang múi giờ Việt Nam
+                start_time_vn = parse_time_to_vietnam(start_time_str)
+                end_time_vn = start_time_vn + timedelta(hours=1)  # Default 1 hour
+                
+                # Format lại với timezone Việt Nam
+                start_time_str = vietnam_isoformat(start_time_vn)
+                end_time_str = vietnam_isoformat(end_time_vn)
+        else:
+            # Fallback: Phân tích thời gian từ input thông qua ScheduleAdvisor
+            advisor_result = self.advisor.advise_schedule(user_request)
+            
+            if 'suggested_time' not in advisor_result:
+                return "Không thể phân tích thời gian từ yêu cầu của bạn."
+            
+            suggested_time = advisor_result['suggested_time']
+            print(f"ScheduleAdvisor parsed time: {suggested_time}")
+            
+            from utils.timezone_utils import get_vietnam_time, vietnam_isoformat
+            
+            # Chuẩn hóa sang múi giờ Việt Nam
+            suggested_time_vn = get_vietnam_time(suggested_time)
+            end_time = self._calculate_end_time(user_request, suggested_time_vn)
+            end_time_vn = get_vietnam_time(end_time)
+            
+            start_time_str = vietnam_isoformat(suggested_time_vn)
+            end_time_str = vietnam_isoformat(end_time_vn)
         
-        suggested_time = advisor_result['suggested_time']
-        print(f"Parsed time: {suggested_time}")
-        
-        # 2. Trích xuất thông tin từ yêu cầu
-        #title = self._extract_title(user_request)
+        # 2. Trích xuất thông tin khác
         title = args.get('title', user_request)
-        
-        # 3. Trích description từ yêu cầu (nếu có)
-        description = args.get('description', user_request)
+        description = args.get('description', '')
         if not description:
             description = title
         
-        
-        # 4. Trích xuất khoảng thời gian từ yêu cầu
-        end_time = self._calculate_end_time(user_request, suggested_time)
+        print(f"Final: {title} | {start_time_str} - {end_time_str}")
 
-        # 5. Định dạng thời gian
-        start_time_str = suggested_time.strftime('%Y-%m-%dT%H:%M:%S')
-        end_time_str = end_time.strftime('%Y-%m-%dT%H:%M:%S')
-        
-        print(f"Final times: {start_time_str} - {end_time_str}")
-
-        # 6. Thêm vào database
+        # 3. Thêm vào database
         result = executor.add_schedule(title, description, start_time_str, end_time_str)
         return result
 
