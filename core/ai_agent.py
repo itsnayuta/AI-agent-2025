@@ -10,14 +10,16 @@ from core.exceptions import GeminiAPIError
 class AIAgent:
     def __init__(self):
         self.gemini_service = GeminiService()
-        self.function_handler = FunctionCallHandler()
+        # Tạo advisor có truyền LLM để sinh câu hỏi tự nhiên
+        self.advisor = ScheduleAdvisor(llm=self.gemini_service)
+        # Truyền advisor cho FunctionCallHandler để dùng chung
+        self.function_handler = FunctionCallHandler(self.advisor)
         self.functions = get_function_definitions()
-        self.advisor = ScheduleAdvisor()
         self.notification_manager = get_notification_manager()
-    
+
     def process_user_input(self, user_input: str) -> str:
         print("Đang xử lý yêu cầu...")
-        
+
         # Kiểm tra xem có phải lệnh thiết lập email không
         email_command_result = self.notification_manager.process_user_input(user_input)
         if email_command_result['is_email_command']:
@@ -25,17 +27,17 @@ class AIAgent:
                 return f"✓ {email_command_result['message']}"
             else:
                 return f"{email_command_result['message']}"
-        
+
         try:
             system_prompt = self._build_system_prompt(user_input)
             response = self.gemini_service.generate_with_timeout(system_prompt, self.functions)
             function_call = self.gemini_service.extract_function_call(response)
-            
+
             if function_call:
                 print(f"DEBUG Gemini function call:")
                 print(f"Function: {function_call.name}")
                 print(f"Args: {dict(function_call.args) if hasattr(function_call, 'args') else 'No args'}")
-                
+
                 function_response = self.function_handler.handle_function_call(function_call, user_input)
                 print("Gemini AI Response:")
                 print(function_response)
@@ -43,7 +45,7 @@ class AIAgent:
             else:
                 print("Gemini không gọi function, sử dụng logic trực tiếp...")
                 return self._handle_direct_response(user_input)
-                
+
         except GeminiAPIError as e:
             error_msg = f"Lỗi Gemini API: {e}"
             print(error_msg)
@@ -52,23 +54,23 @@ class AIAgent:
             error_msg = f"Lỗi hệ thống: {e}"
             print(error_msg)
             return error_msg
-    
+
     def _build_system_prompt(self, user_input: str) -> str:
         now = datetime.now()
         current_date = now.strftime('%Y-%m-%d')
-        current_weekday_index = now.weekday() # 0 = Thứ 2, 6 = Chủ nhật
-        
+        current_weekday_index = now.weekday()  # 0 = Thứ 2, 6 = Chủ nhật
+
         # 1. Tính toán các mốc thời gian cơ bản
         today = now.date()
         tomorrow = today + timedelta(days=1)
         day_after_tomorrow = today + timedelta(days=2)
-        
+
         # 2. Tính toán ngày cho từng thứ trong tuần gần nhất
         weekdays_map = {
             "Thứ 2": 0, "Thứ 3": 1, "Thứ 4": 2, "Thứ 5": 3,
             "Thứ 6": 4, "Thứ 7": 5, "Chủ nhật": 6
         }
-        
+
         next_weekdays = {}
         for day_name, day_index in weekdays_map.items():
             # Tính số ngày cần thêm để đến ngày trong tuần mong muốn
@@ -104,11 +106,11 @@ class AIAgent:
         - RẤT QUAN TRỌNG: Khi gọi smart_add_schedule, hãy trích xuất **TIÊU ĐỀ** ngắn gọn (ví dụ: 'Khám răng') cho tham số 'title'. Đối với tham số **'description'**, chỉ lấy những thông tin chi tiết khác không phải là tiêu đề, thời gian hoặc hành động (ví dụ: 'thời gian 2 tiếng' hoặc 'địa chỉ là 123 đường ABC').
 
         Yêu cầu: {user_input}"""
-    
+
     def _handle_direct_response(self, user_input: str) -> str:
         """Handle direct response when no function is called"""
         result = self.advisor.advise_schedule(user_input)
         formatted_response = self.advisor.format_response(result)
-        print("🤖 Direct Response:")
+        print("Direct Response:")
         print(formatted_response)
         return formatted_response
