@@ -1,4 +1,3 @@
-# Function call handler
 from datetime import datetime, timedelta
 import re
 from typing import Dict
