@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.cors import CORSMiddleware
 from starlette.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from fastapi import Request
@@ -94,6 +95,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+origins = ["*"]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,  # Allows specified origins
+    allow_credentials=True, # Allows cookies to be included in requests
+    allow_methods=["*"],    # Allows all methods (GET, POST, etc.)
+    allow_headers=["*"],    # Allows all headers
+)
+
 # Mount static files (CSS, JS...)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -106,3 +116,6 @@ app.include_router(schedule_router.router)
 @app.get("/", response_class=HTMLResponse)
 def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
