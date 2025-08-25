@@ -96,13 +96,36 @@ class FunctionCallHandler:
         if start_time_str:
             # Gemini đã parse được thời gian
             print(f"Using Gemini parsed time: {start_time_str}")
-            if not end_time_str:
-                # Tính toán end_time dựa trên start_time
-                from utils.timezone_utils import parse_time_to_vietnam, vietnam_isoformat
+            
+            # Kiểm tra và sửa năm nếu cần
+            from utils.timezone_utils import parse_time_to_vietnam, vietnam_isoformat, get_vietnam_now
+            from datetime import datetime
+            
+            try:
                 start_time_vn = parse_time_to_vietnam(start_time_str)
-                end_time_vn = start_time_vn + timedelta(hours=1)  # Default 1 hour
-                start_time_str = vietnam_isoformat(start_time_vn)
-                end_time_str = vietnam_isoformat(end_time_vn)
+                current_year = get_vietnam_now().year
+                
+                # Nếu năm không đúng, sửa lại
+                if start_time_vn.year != current_year:
+                    print(f"⚠️ WARNING: Gemini returned wrong year {start_time_vn.year}, correcting to {current_year}")
+                    start_time_vn = start_time_vn.replace(year=current_year)
+                    start_time_str = vietnam_isoformat(start_time_vn)
+                    print(f"✅ Corrected time: {start_time_str}")
+                
+                if not end_time_str:
+                    # Tính toán end_time dựa trên start_time
+                    end_time_vn = start_time_vn + timedelta(hours=1)  # Default 1 hour
+                    end_time_str = vietnam_isoformat(end_time_vn)
+                else:
+                    # Kiểm tra end_time cũng
+                    end_time_vn = parse_time_to_vietnam(end_time_str)
+                    if end_time_vn.year != current_year:
+                        end_time_vn = end_time_vn.replace(year=current_year)
+                        end_time_str = vietnam_isoformat(end_time_vn)
+                        
+            except Exception as e:
+                print(f"⚠️ Error parsing time: {e}, falling back to advisor")
+                start_time_str = None
         else:
             # Fallback: Phân tích thời gian từ input thông qua ScheduleAdvisor
             advisor_result = self.advisor.advise_schedule(user_request)

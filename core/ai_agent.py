@@ -5,11 +5,10 @@ from core.models.function_definitions import get_function_definitions
 from core.notification import get_notification_manager
 from core.services.ScheduleAdvisor import ScheduleAdvisor
 from core.services.gemini_service import GeminiService
+from core.exceptions import GeminiAPIError
+from datetime import datetime, timedelta
 
 
-def _build_system_prompt(user_input: str) -> str:
-    # This prompt is simplified for clarity
-    return f"Phân tích yêu cầu và gọi function phù hợp. Yêu cầu: {user_input}"
 
 
 def _handle_basic_greetings(user_input: str) -> str | None:
@@ -86,7 +85,7 @@ class AIAgent:
 
         try:
             # 3. Call Gemini to analyze complex requests
-            system_prompt = _build_system_prompt(user_input)
+            system_prompt = self._build_system_prompt(user_input)
             response = self.gemini_service.generate_with_timeout(system_prompt, self.functions)
             function_call = self.gemini_service.extract_function_call(response)
 
@@ -110,6 +109,7 @@ class AIAgent:
     def _build_system_prompt(self, user_input: str) -> str:
         now = datetime.now()
         current_date = now.strftime('%Y-%m-%d')
+        current_year = now.year
         current_weekday_index = now.weekday()  # 0 = Thứ 2, 6 = Chủ nhật
 
         # 1. Tính toán các mốc thời gian cơ bản
@@ -129,9 +129,14 @@ class AIAgent:
             days_to_add = (day_index - current_weekday_index + 7) % 7
             next_weekdays[day_name] = today + timedelta(days=days_to_add)
 
-        return f"""QUAN TRỌNG: Hôm nay là {current_date} (Thứ {current_weekday_index + 1}).
+        return f"""🚨 QUAN TRỌNG: Hôm nay là {current_date} (Thứ {current_weekday_index + 1}) - NĂM {current_year} 🚨
 
-        Đây là các mốc thời gian quan trọng để tham chiếu:
+        ⚠️ LƯU Ý QUAN TRỌNG VỀ THỜI GIAN:
+        - NĂM HIỆN TẠI LÀ: {current_year}
+        - KHÔNG BAO GIỜ sử dụng năm 2024 hoặc năm khác!
+        - TẤT CẢ thời gian phải thuộc năm {current_year}
+
+        Đây là các mốc thời gian quan trọng để tham chiếu (NĂM {current_year}):
         - Hôm nay: {current_date}
         - Ngày mai: {tomorrow.strftime('%Y-%m-%d')}
         - Ngày kia: {day_after_tomorrow.strftime('%Y-%m-%d')}
@@ -151,10 +156,13 @@ class AIAgent:
         - Cập nhật lịch → update_schedule (cần schedule_id)
         - Xóa lịch → delete_schedule (cần schedule_id)
 
-        LƯU Ý: 
-        - Khi phân tích thời gian, hãy sử dụng các mốc tham chiếu ở trên.
-        - KHÔNG tự tạo thời gian năm 2024!
-        - Ưu tiên dùng smart_add_schedule cho yêu cầu thêm lịch.
+        🎯 QUY TẮC XỬ LÝ THỜI GIAN:
+        - LUÔN sử dụng các mốc tham chiếu ở trên
+        - "Mai" = {tomorrow.strftime('%Y-%m-%d')} (NĂM {current_year})
+        - "Ngày kia" = {day_after_tomorrow.strftime('%Y-%m-%d')} (NĂM {current_year})
+        - KHÔNG BAO GIỜ tự tạo thời gian năm 2024!
+        - TẤT CẢ thời gian phải có định dạng ISO: YYYY-MM-DDTHH:MM:SS
+        - Ưu tiên dùng smart_add_schedule cho yêu cầu thêm lịch
         - RẤT QUAN TRỌNG: Khi gọi smart_add_schedule, hãy trích xuất **TIÊU ĐỀ** ngắn gọn (ví dụ: 'Khám răng') cho tham số 'title'. Đối với tham số **'description'**, chỉ lấy những thông tin chi tiết khác không phải là tiêu đề, thời gian hoặc hành động (ví dụ: 'thời gian 2 tiếng' hoặc 'địa chỉ là 123 đường ABC').
 
         Yêu cầu: {user_input}"""
