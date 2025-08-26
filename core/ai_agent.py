@@ -8,52 +8,6 @@ from core.services.gemini_service import GeminiService
 from core.exceptions import GeminiAPIError
 from datetime import datetime, timedelta
 
-
-def _handle_basic_greetings(user_input: str) -> str | None:
-    """Xử lý các câu chào hỏi và phản hồi cơ bản một cách tự nhiên hơn."""
-    user_input_lower = user_input.lower().strip()
-
-    greetings = ["xin chào", "chào bạn", "chào", "hi", "hello", "alo"]
-    how_are_you = ["bạn có khỏe không", "khỏe không", "how are you"]
-    who_are_you = ["bạn là ai", "bạn tên gì", "who are you"]
-    thanks = ["cảm ơn", "cám ơn", "thank you", "thanks"]
-    goodbyes = ["tạm biệt", "bye", "hẹn gặp lại", "bai"]
-    confirmations = ["ừ", "uk", "ok", "oke", "được rồi", "đúng rồi"]
-
-    GREETING_RESPONSES = [
-        "Chào bạn, tôi có thể giúp gì cho bạn hôm nay?",
-        "Xin chào! Bạn cần hỗ trợ về lịch trình chứ?",
-        "Chào bạn, tôi là trợ lý ảo sẵn sàng giúp bạn quản lý công việc."
-    ]
-    THANKS_RESPONSES = ["Không có gì, rất vui được hỗ trợ bạn!", "Rất hân hạnh được giúp đỡ!"]
-    CONFIRMATION_RESPONSES = ["Tuyệt vời! Bạn có cần tôi hỗ trợ thêm gì không?",
-                              "Đã rõ. Tôi có thể giúp gì khác cho bạn không?"]
-
-    if any(word in user_input_lower for word in greetings):
-        return random.choice(GREETING_RESPONSES)
-    if any(phrase in user_input_lower for phrase in how_are_you):
-        return "Cảm ơn bạn đã hỏi, tôi là một chương trình máy tính nên luôn 'khỏe'. Bạn cần giúp gì về lịch trình không?"
-    if any(phrase in user_input_lower for phrase in who_are_you):
-        return "Tôi là một trợ lý ảo thông minh, được tạo ra để giúp bạn quản lý lịch trình một cách hiệu quả."
-    if any(word in user_input_lower for word in thanks):
-        return random.choice(THANKS_RESPONSES)
-    if any(word in user_input_lower for word in goodbyes):
-        return "Tạm biệt bạn, hẹn gặp lại!"
-    if any(word in user_input_lower for word in confirmations):
-        return random.choice(CONFIRMATION_RESPONSES)
-    return None
-
-
-def _handle_irrelevant_input(user_input: str) -> str | None:
-    user_input_lower = user_input.lower().strip()
-    scheduling_keywords = [
-        "lịch", "cuộc hẹn", "sự kiện", "công việc", "nhắc", "tạo", "thêm", "xóa", "sửa", "kiểm tra", "xem"
-    ]
-    if not any(word in user_input_lower for word in scheduling_keywords):
-        return "Xin lỗi, tôi chỉ có thể hỗ trợ các vấn đề liên quan đến lịch trình."
-    return None
-
-
 class AIAgent:
     def __init__(self):
         self.gemini_service = GeminiService()
@@ -67,11 +21,6 @@ class AIAgent:
         print(f"\n[Người dùng]: {user_input}")
         print("---------------------------------")
         print("[Hệ thống]: Đang xử lý yêu cầu...")
-
-        # 1. Handle basic greetings
-        basic_response = _handle_basic_greetings(user_input)
-        if basic_response:
-            return f"[Trợ lý]: {basic_response}"
 
         # 2. Handle special commands (e.g., email setup)
         email_command_result = self.notification_manager.process_user_input(user_input)
