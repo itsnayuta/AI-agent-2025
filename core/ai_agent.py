@@ -98,6 +98,14 @@ class AIAgent:
                         args.pop("preferred_date", None)
                         args.pop("preferred_weekday", None)
                         function_call.args = args
+                if function_call.name in ["update_schedule", "delete_schedule"]:
+                    args = function_call.args or {}
+                    schedule_id = function_call.args.get("schedule_id") if function_call.args else None
+                    if schedule_id is None or str(schedule_id) == "123.0":
+                     # Trả về câu hỏi yêu cầu người dùng cung cấp ID
+                        args.pop("schedule_id", None)
+                        function_call.args = args
+                        return "[Trợ lý]: Xin vui lòng cung cấp ID của lịch trình bạn muốn cập nhật/xóa."
 
                 function_response = self.function_handler.handle_function_call(function_call, user_input)
                 print("Function Response:", function_response)
