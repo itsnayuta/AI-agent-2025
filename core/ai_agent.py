@@ -9,8 +9,6 @@ from core.exceptions import GeminiAPIError
 from datetime import datetime, timedelta
 
 
-
-
 def _handle_basic_greetings(user_input: str) -> str | None:
     """Xử lý các câu chào hỏi và phản hồi cơ bản một cách tự nhiên hơn."""
     user_input_lower = user_input.lower().strip()
@@ -59,9 +57,7 @@ def _handle_irrelevant_input(user_input: str) -> str | None:
 class AIAgent:
     def __init__(self):
         self.gemini_service = GeminiService()
-        # Tạo advisor có truyền LLM để sinh câu hỏi tự nhiên
         self.advisor = ScheduleAdvisor(llm=self.gemini_service)
-        # Truyền advisor cho FunctionCallHandler để dùng chung
         self.function_handler = FunctionCallHandler(self.advisor)
         self.functions = get_function_definitions()
         self.notification_manager = get_notification_manager()
@@ -78,7 +74,6 @@ class AIAgent:
             return f"[Trợ lý]: {basic_response}"
 
         # 2. Handle special commands (e.g., email setup)
-        # This part is simplified as it's not the main issue
         email_command_result = self.notification_manager.process_user_input(user_input)
         if email_command_result['is_email_command']:
             return "[Trợ lý]: Lệnh email đã được xử lý."
@@ -91,7 +86,21 @@ class AIAgent:
 
             if function_call:
                 print(f"DEBUG: Gemini function call detected: {function_call.name}")
+
+                # **PATCH: Kiểm tra lại dữ liệu quan trọng trước khi gọi FunctionCallHandler**
+                if function_call.name == "advise_schedule":
+                    args = function_call.args or {}
+                    # Nếu request gốc thiếu thông tin, bỏ qua giá trị "fill" cũ -> buộc advisor hỏi tiếp
+                    if not any(keyword in user_input.lower() for keyword in ["sáng", "chiều", "tối", "hôm nay", "ngày", "lúc", "thứ"]):
+                        args.pop("preferred_time_of_day", None)
+                        args.pop("duration", None)
+                        args.pop("priority", None)
+                        args.pop("preferred_date", None)
+                        args.pop("preferred_weekday", None)
+                        function_call.args = args
+
                 function_response = self.function_handler.handle_function_call(function_call, user_input)
+                print("Function Response:", function_response)
                 return function_response
             else:
                 print("DEBUG: Input seems relevant, using direct response logic...")
@@ -110,14 +119,12 @@ class AIAgent:
         now = datetime.now()
         current_date = now.strftime('%Y-%m-%d')
         current_year = now.year
-        current_weekday_index = now.weekday()  # 0 = Thứ 2, 6 = Chủ nhật
+        current_weekday_index = now.weekday()
 
-        # 1. Tính toán các mốc thời gian cơ bản
         today = now.date()
         tomorrow = today + timedelta(days=1)
         day_after_tomorrow = today + timedelta(days=2)
 
-        # 2. Tính toán ngày cho từng thứ trong tuần gần nhất
         weekdays_map = {
             "Thứ 2": 0, "Thứ 3": 1, "Thứ 4": 2, "Thứ 5": 3,
             "Thứ 6": 4, "Thứ 7": 5, "Chủ nhật": 6
@@ -125,7 +132,6 @@ class AIAgent:
 
         next_weekdays = {}
         for day_name, day_index in weekdays_map.items():
-            # Tính số ngày cần thêm để đến ngày trong tuần mong muốn
             days_to_add = (day_index - current_weekday_index + 7) % 7
             next_weekdays[day_name] = today + timedelta(days=days_to_add)
 
@@ -158,12 +164,8 @@ class AIAgent:
 
         🎯 QUY TẮC XỬ LÝ THỜI GIAN:
         - LUÔN sử dụng các mốc tham chiếu ở trên
-        - "Mai" = {tomorrow.strftime('%Y-%m-%d')} (NĂM {current_year})
-        - "Ngày kia" = {day_after_tomorrow.strftime('%Y-%m-%d')} (NĂM {current_year})
         - KHÔNG BAO GIỜ tự tạo thời gian năm 2024!
-        - TẤT CẢ thời gian phải có định dạng ISO: YYYY-MM-DDTHH:MM:SS
         - Ưu tiên dùng smart_add_schedule cho yêu cầu thêm lịch
-        - RẤT QUAN TRỌNG: Khi gọi smart_add_schedule, hãy trích xuất **TIÊU ĐỀ** ngắn gọn (ví dụ: 'Khám răng') cho tham số 'title'. Đối với tham số **'description'**, chỉ lấy những thông tin chi tiết khác không phải là tiêu đề, thời gian hoặc hành động (ví dụ: 'thời gian 2 tiếng' hoặc 'địa chỉ là 123 đường ABC').
 
         Yêu cầu: {user_input}"""
 

@@ -5,32 +5,41 @@ def get_function_definitions() -> List[Dict[str, Any]]:
     """Định nghĩa các function cho Gemini AI"""
     return [
         {
-            "name": "advise_schedule",
-            "description": "Tư vấn lập lịch cho người dùng dựa trên thời gian và loại công việc được đề cập.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "user_request": {
-                        "type": "string",
-                        "description": "Yêu cầu lập lịch của người dùng, ví dụ: 'Họp team vào tuần sau'.",
-                    },
-                    "preferred_time_of_day": {
-                        "type": "string",
-                        "enum": ["sáng", "chiều", "tối"],
-                        "description": "Khung thời gian mong muốn (nếu có).",
-                    },
-                    "duration": {
-                        "type": "string",
-                        "description": "Thời lượng ước tính của lịch (ví dụ: '2 tiếng', '30 phút').",
-                    },
-                    "priority": {
-                        "type": "string",
-                        "enum": ["cao", "trung bình", "thấp"],
-                        "description": "Mức độ ưu tiên (nếu người dùng đề cập).",
-                    },
-                },
-                "required": ["user_request"],
+                "name": "advise_schedule",
+    "description": "Tư vấn lập lịch, trả về ngày/thời gian cụ thể hoặc yêu cầu thêm thông tin.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "user_request": {
+                "type": "string",
+                "description": "Yêu cầu lập lịch của người dùng, ví dụ: 'Họp team vào thứ 6 tuần này'."
             },
+            "preferred_time_of_day": {
+                "type": "string",
+                "enum": ["sáng", "chiều", "tối"],
+                "description": "Khung thời gian mong muốn."
+            },
+            "preferred_date": {
+                "type": "string",
+                "description": "Ngày cụ thể người dùng yêu cầu, format YYYY-MM-DD (nếu xác định được)."
+            },
+            "preferred_weekday": {
+                "type": "string",
+                "enum": ["Thứ 2","Thứ 3","Thứ 4","Thứ 5","Thứ 6","Thứ 7","Chủ nhật"],
+                "description": "Ngày trong tuần mà người dùng yêu cầu (nếu có)."
+            },
+            "duration": {
+                "type": "string",
+                "description": "Thời lượng ước tính của lịch (ví dụ: '2 tiếng', '30 phút')."
+            },
+            "priority": {
+                "type": "string",
+                "enum": ["cao", "trung bình", "thấp"],
+                "description": "Mức độ ưu tiên (nếu có)."
+            }
+        },
+        "required": ["user_request"]
+    }
         },
         {
             "name": "smart_add_schedule",

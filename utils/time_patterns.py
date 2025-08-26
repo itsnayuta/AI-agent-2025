@@ -5,10 +5,13 @@ def parse_weekday(match, current_time, weekday_map):
     target_weekday = weekday_map.get(weekday_str)
     if target_weekday is None:
         return None
-    days_ahead = target_weekday - current_time.weekday()
-    if days_ahead <= 0:
-        days_ahead += 7
-    return (current_time + timedelta(days=days_ahead)).replace(hour=8, minute=0, second=0, microsecond=0)
+
+    days_ahead = (target_weekday - current_time.weekday() + 7) % 7
+    if days_ahead == 0:
+        days_ahead = 7  # If today is the same day, suggest next week
+
+    target_date = current_time.date() + timedelta(days=days_ahead)
+    return datetime.combine(target_date, time(8, 0)).replace(tzinfo=current_time.tzinfo)
 
 def parse_weekday_this_week(match, current_time, weekday_map):
     weekday_str = match.group(1).lower().replace(' ', '')

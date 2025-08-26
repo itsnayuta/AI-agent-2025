@@ -62,23 +62,36 @@ class FunctionCallHandler:
             executor.close()
 
     def _handle_advise_schedule(self, args: Dict, user_input: str) -> str:
-        irrelevant_response = _handle_irrelevant_input(user_input)
-        if irrelevant_response:
-            return f"[Trợ lý]: {irrelevant_response}"
+        # irrelevant_response = _handle_irrelevant_input(user_input)
+        # if irrelevant_response:
+        #     return f"[Trợ lý]: {irrelevant_response}"
 
         """Xử lý tư vấn lịch"""
         user_request = args.get('user_request', user_input)
         preferred_time_of_day = args.get('preferred_time_of_day')
         duration = args.get('duration')
         priority = args.get('priority')
+        preferreddate = args.get('preferred_date')
+        preferred_weekday = args.get('preferred_weekday')
+
+        print(f"DEBUG advise_schedule:")
+        print(f"user_request: {user_request}")  
+        print(f"preferred_time_of_day: {preferred_time_of_day}")
+        print(f"duration: {duration}")
+        print(f"priority: {priority}")
+        print(f"preferred_date: {preferreddate}")
+        print(f"preferred_weekday: {preferred_weekday}")
 
         # Ủy quyền cho advisor quyết định hỏi thêm hay tư vấn
         result = self.advisor.advise_schedule(
             user_request=user_request,
             preferred_time_of_day=preferred_time_of_day,
             duration=duration,
-            priority=priority
+            priority=priority,
+            preferred_date=preferreddate,
+            preferred_weekday=preferred_weekday
         )
+        print(f"DEBUG advise_schedule result: {result} \n")
         return self.advisor.format_response(result)
 
     def _handle_smart_add_schedule(self, args: Dict, user_input: str, executor: ExecuteSchedule) -> str:
