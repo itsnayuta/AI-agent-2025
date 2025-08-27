@@ -1,5 +1,3 @@
-import random
-
 from core.handlers.function_handler import FunctionCallHandler
 from core.models.function_definitions import get_function_definitions
 from core.notification import get_notification_manager
@@ -30,7 +28,7 @@ class AIAgent:
         else:
             print(f"[AI Agent] Bắt đầu session mới: {self.session_id}")
 
-    def process_user_input(self, user_input: str) -> str | dict[str, str]:
+    async def process_user_input(self, user_input: str) -> str | dict[str, str]:
         """Main processing loop for user input."""
         print(f"\n[Người dùng]: {user_input}")
         print("---------------------------------")
@@ -82,7 +80,7 @@ class AIAgent:
                         self.conversation_service.add_assistant_message(response, session_id=self.session_id)
                         return response
 
-                function_response = self.function_handler.handle_function_call(function_call, user_input)
+                function_response = await self.function_handler.handle_function_call(function_call, user_input)
                 
                 # Xử lý hành động thoát
                 if isinstance(function_response, dict) and function_response.get('action') == 'exit':

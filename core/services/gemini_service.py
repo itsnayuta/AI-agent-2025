@@ -88,3 +88,19 @@ class GeminiService:
 
         # 4. Fallback for any other unexpected data types
         return "Không thể định dạng loại phản hồi không xác định."
+
+    async def process_message(self, message: str) -> str:
+        """
+        Xử lý tin nhắn bằng Gemini AI cho tư vấn lịch trình
+        """
+        try:
+            response = self.model.generate_content(
+                message,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.3,  # Tăng creativity cho tư vấn
+                    max_output_tokens=500  # Tăng độ dài cho phản hồi chi tiết
+                )
+            )
+            return response.text
+        except Exception as e:
+            raise GeminiAPIError(f"Lỗi khi xử lý tin nhắn: {str(e)}")

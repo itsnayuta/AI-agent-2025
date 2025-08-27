@@ -62,24 +62,24 @@ class ScheduleAdvisor:
         # Danh sách các pattern regex để trích xuất thời gian
         self.time_patterns = [
             (r"(\d{1,2})(?:h|:)?(\d{2})?\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*tuần\s*này",
-             lambda m: parse_time_weekday_this_week(m, self.current_time, self.weekday_map)),
+            lambda m: parse_time_weekday_this_week(m, self.current_time, self.weekday_map)),
             (r"(\d{1,2})(?:h|:)?(\d{2})?\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*tuần\s*sau",
-             lambda m: parse_time_weekday_next_week(m, self.current_time, self.weekday_map)),
+            lambda m: parse_time_weekday_next_week(m, self.current_time, self.weekday_map)),
             (r"(sáng|chiều|tối)\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*(?:lúc|vào)?\s*(\d{1,2})(?:h|:)?(\d{2})?",
-             lambda m: parse_time_period_weekday_with_hour(m, self.current_time, self.weekday_map)),
+            lambda m: parse_time_period_weekday_with_hour(m, self.current_time, self.weekday_map)),
             (r"(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*(?:tuần\s*này|tuần\s*sau)?\s*(?:lúc|vào)?\s*(\d{1,2})(?:h|:)?(\d{2})?",
-             lambda m: parse_weekday_time(m, self.current_time, self.weekday_map)),
+            lambda m: parse_weekday_time(m, self.current_time, self.weekday_map)),
             (r"(\d{1,2})(?:h|:)?(\d{2})?\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])",
-             lambda m: parse_time_weekday(m, self.current_time, self.weekday_map)),
+            lambda m: parse_time_weekday(m, self.current_time, self.weekday_map)),
             (r"(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*tuần\s*này",
-             lambda m: parse_weekday_this_week(m, self.current_time, self.weekday_map)),
+            lambda m: parse_weekday_this_week(m, self.current_time, self.weekday_map)),
             (r"(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*tuần\s*sau",
-             lambda m: parse_weekday_next_week(m, self.current_time, self.weekday_map)),
+            lambda m: parse_weekday_next_week(m, self.current_time, self.weekday_map)),
             (r"(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])",
-             lambda m: parse_weekday(m, self.current_time, self.weekday_map)),
+            lambda m: parse_weekday(m, self.current_time, self.weekday_map)),
             (r"(sáng|chiều|tối)\s*(hôm\s*nay|mai|ngày\s*kia)", lambda m: parse_time_period_day(m, self.current_time)),
             (r"(sáng|chiều|tối)\s*(thứ\s*[2-7]|chủ\s*nhật)",
-             lambda m: parse_time_period_weekday(m, self.current_time, self.weekday_map)),
+            lambda m: parse_time_period_weekday(m, self.current_time, self.weekday_map)),
             (r"sau\s*(\d+)\s*ngày", lambda m: parse_after_days(m, self.current_time)),
             (r"sau\s*(\d+)\s*tuần", lambda m: parse_after_weeks(m, self.current_time)),
             (r"sau\s*(\d+)\s*tháng", lambda m: parse_after_months(m, self.current_time)),
@@ -90,6 +90,12 @@ class ScheduleAdvisor:
         self.low_priority_keywords = ['không gấp', 'có thể', 'nếu được', 'tùy ý']
         # giữ reference đến LLM/Gemini (nếu có) để sinh câu hỏi tự nhiên
         self.llm = llm
+        # Import google_calendar_service để sử dụng các tính năng mới
+        try:
+            from core.services.google_calendar_service import GoogleCalendarService
+            self.calendar_service = GoogleCalendarService()
+        except Exception:
+            self.calendar_service = None
         # Tạo kết nối DB
         self.conn = sqlite3.connect(db_path)
         self._create_table()
@@ -502,6 +508,150 @@ class ScheduleAdvisor:
             result += f"**{response['main_suggestion']}**\n"
             result += f"Chi tiết lỗi: {response.get('error', 'Không xác định')}"
         return result
+
+    def find_available_slots(self, target_date: datetime, duration_minutes: int, preferred_start_hour: int = None, preferred_end_hour: int = None) -> List[str]:
+        """
+        Tìm các khung giờ trống trong ngày cụ thể
+        """
+        available_slots = []
+        
+        # Thiết lập khung giờ tìm kiếm
+        start_hour = preferred_start_hour or self.business_hours[0]  # 8h
+        end_hour = preferred_end_hour or self.business_hours[1]      # 17h
+        
+        # Tạo các slot 30 phút
+        current_time = target_date.replace(hour=start_hour, minute=0, second=0, microsecond=0)
+        end_time = target_date.replace(hour=end_hour, minute=0, second=0, microsecond=0)
+        
+        while current_time + timedelta(minutes=duration_minutes) <= end_time:
+            slot_end = current_time + timedelta(minutes=duration_minutes)
+            
+            # Bỏ qua giờ ăn trưa
+            if not (current_time.hour == 12 and current_time.minute == 0):
+                # Kiểm tra xung đột với database
+                if self.calendar_service:
+                    is_free = self.calendar_service.is_time_slot_free(current_time, slot_end)
+                else:
+                    # Fallback kiểm tra với database trực tiếp
+                    is_free = check_schedule_overlap(self.conn, current_time, slot_end)
+                
+                if is_free:
+                    available_slots.append(f"{current_time.strftime('%H:%M')} - {slot_end.strftime('%H:%M')}")
+                    
+            # Chuyển sang slot tiếp theo (15 phút)
+            current_time += timedelta(minutes=15)
+            
+            # Giới hạn tối đa 10 slots để không quá nhiều
+            if len(available_slots) >= 10:
+                break
+                
+        return available_slots
+
+    async def intelligent_schedule_advice(self, user_input: str, context: Dict = None) -> str:
+        """
+        Tư vấn lịch trình thông minh với tìm kiếm khung giờ trống
+        """
+        if not self.llm:
+            # Fallback về phương thức cũ nếu không có Gemini
+            result = self.advise_schedule(user_input)
+            return self.format_response(result)
+        
+        try:
+            # Trích xuất thông tin từ yêu cầu người dùng
+            extracted_time = self._extract_time(user_input)
+            duration_minutes = self._extract_duration_from_text(user_input)
+            
+            if extracted_time and duration_minutes:
+                # Tìm khung giờ trống cho ngày được yêu cầu
+                target_date = extracted_time.date()
+                target_datetime = datetime.combine(target_date, datetime.min.time()).replace(tzinfo=self.vietnam_tz)
+                
+                available_slots = self.find_available_slots(
+                    target_datetime, 
+                    duration_minutes,
+                    preferred_start_hour=8,
+                    preferred_end_hour=17
+                )
+                
+                if available_slots:
+                    response = f"📅 **Lịch khám răng {target_date.strftime('%d/%m/%Y')} - Thời lượng: {duration_minutes} phút**\n\n"
+                    response += "🕒 **Các khung giờ trống:**\n"
+                    for i, slot in enumerate(available_slots[:8], 1):  # Hiển thị tối đa 8 slots
+                        response += f"{i}. {slot}\n"
+                    response += f"\nVui lòng chọn khung giờ phù hợp!"
+                    return response
+                else:
+                    return f"❌ **Không có khung giờ trống nào trong ngày {target_date.strftime('%d/%m/%Y')}**\n\nBạn có muốn tôi đề xuất ngày khác không?"
+            
+            # Nếu không đủ thông tin, dùng Gemini để hỏi làm rõ
+            gemini_prompt = f"""
+TƯ VẤN LỊCH TRÌNH NGẮN GỌN
+
+Yêu cầu: {user_input}
+Thời gian hiện tại: {self.current_time.strftime('%Y-%m-%d %H:%M')} (Việt Nam)
+
+Hãy phân tích yêu cầu và hỏi NGẮN GỌN những thông tin còn thiếu:
+- Ngày cụ thể (nếu chưa rõ)
+- Thời lượng (nếu chưa có)
+- Khung giờ ưu tiên (nếu cần)
+
+Chỉ hỏi tối đa 2 câu, không dài dòng.
+Ví dụ: "Bạn muốn khám vào ngày nào? Thời lượng khoảng bao lâu?"
+"""
+            
+            gemini_response = await self.llm.process_message(gemini_prompt)
+            return gemini_response
+            
+        except Exception as e:
+            print(f"Lỗi khi sử dụng tư vấn thông minh: {e}")
+            # Fallback về phương thức truyền thống
+            response = self.analyze_schedule_request(user_input)
+            return self.format_response(response)
+
+    def _extract_duration_from_text(self, text: str) -> int:
+        """Trích xuất thời lượng từ text (phút)"""
+        import re
+        
+        # Tìm các pattern thời lượng
+        patterns = [
+            r'(\d+)\s*phút',
+            r'(\d+)\s*ph',
+            r'(\d+)\s*minutes?',
+            r'(\d+)\s*mins?',
+            r'(\d+)\s*tiếng',
+            r'(\d+)\s*giờ',
+            r'(\d+)\s*hours?',
+            r'(\d+)\s*hrs?'
+        ]
+        
+        text_lower = text.lower()
+        for pattern in patterns:
+            match = re.search(pattern, text_lower)
+            if match:
+                duration = int(match.group(1))
+                # Chuyển giờ thành phút
+                if any(word in pattern for word in ['tiếng', 'giờ', 'hours?', 'hrs?']):
+                    duration *= 60
+                return duration
+        
+        # Mặc định 30 phút nếu không tìm thấy
+        return 30
+
+    def _format_schedules_for_gemini(self, schedules: List[Dict]) -> str:
+        """Định dạng lịch trình để cung cấp context cho Gemini"""
+        if not schedules:
+            return "Không có lịch trình nào trong 3 ngày tới."
+        
+        formatted = []
+        for schedule in schedules[:10]:  # Giới hạn 10 lịch để tránh context quá dài
+            try:
+                start = datetime.fromisoformat(schedule['start_time']).strftime('%d/%m %H:%M')
+                end = datetime.fromisoformat(schedule['end_time']).strftime('%H:%M')
+                formatted.append(f"- {schedule['title']}: {start} - {end}")
+            except Exception:
+                continue
+        
+        return "\n".join(formatted) if formatted else "Không có lịch trình nào."
 
     def __del__(self):
         if getattr(self, 'conn', None):
