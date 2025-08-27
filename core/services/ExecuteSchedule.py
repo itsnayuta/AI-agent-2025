@@ -1,3 +1,4 @@
+import datetime
 import sqlite3
 import smtplib
 from email.message import EmailMessage
@@ -117,7 +118,8 @@ class ExecuteSchedule:
                 else:
                     new_event_id = self.calendar_service.create_event(final_title, final_desc, final_start, final_end)
                     if new_event_id:
-                        cursor.execute('UPDATE schedules SET google_event_id = ? WHERE id = ?', (new_event_id, schedule_id))
+                        cursor.execute('UPDATE schedules SET google_event_id = ? WHERE id = ?',
+                                       (new_event_id, schedule_id))
                         self.conn.commit()
             return "✅ Đã cập nhật lịch thành công."
         except Exception as e:
@@ -158,13 +160,16 @@ class ExecuteSchedule:
     def get_schedules_by_month(self, year, month):
         """Lấy lịch theo tháng"""
         cursor = self.conn.cursor()
-        cursor.execute('SELECT * FROM schedules WHERE COALESCE(deleted, 0) = 0 AND strftime("%Y", start_time)=? AND strftime("%m", start_time)=? ORDER BY start_time', (str(year), f'{month:02d}'))
+        month_str = f'{int(month):02d}'
+        query_string = f'{int(year)}-{month_str}%'
+        cursor.execute('SELECT * FROM schedules WHERE COALESCE(deleted, 0) = 0 AND start_time LIKE ? ORDER BY start_time', (query_string,))
         return cursor.fetchall()
 
     def get_schedules_by_year(self, year):
         """Lấy lịch theo năm"""
         cursor = self.conn.cursor()
-        cursor.execute('SELECT * FROM schedules WHERE COALESCE(deleted, 0) = 0 AND strftime("%Y", start_time)=? ORDER BY start_time', (str(year),))
+        query_string = f'{int(year)}%'
+        cursor.execute('SELECT * FROM schedules WHERE COALESCE(deleted, 0) = 0 AND start_time LIKE ? ORDER BY start_time', (query_string,))
         return cursor.fetchall()
 
     def validate_time(self, start_time, end_time, exclude_id=None):
@@ -178,7 +183,7 @@ class ExecuteSchedule:
         except Exception as e:
             print(f"[Debug] validate_time parse error: {e}")
             return False
-        
+
         cursor = self.conn.cursor()
         query = 'SELECT id, start_time, end_time FROM schedules WHERE COALESCE(deleted, 0) = 0'
         cursor.execute(query)
@@ -197,7 +202,7 @@ class ExecuteSchedule:
                 print(f"[Debug] validate_time existing schedule error: {e}")
                 continue
         return True
-    
+
     def _get_vietnam_timestamp(self):
         """Lấy timestamp hiện tại theo múi giờ Việt Nam"""
         from utils.timezone_utils import get_vietnam_timestamp
@@ -210,7 +215,7 @@ class ExecuteSchedule:
             try:
                 email = EmailMessage()
                 email.set_content(message)
-                email['Subject'] = 'Thông báo lịch mới'
+                email['Subject'] = 'Thông báo lịch'
                 email['From'] = self.smtp_config['user']
                 email['To'] = self.smtp_config['to']
                 with smtplib.SMTP(self.smtp_config['host'], self.smtp_config['port']) as smtp:
@@ -219,6 +224,112 @@ class ExecuteSchedule:
                     smtp.send_message(email)
             except Exception as e:
                 print(f"Gửi email thất bại: {e}")
+
+    # --- NEW FUNCTIONS ---
+
+    def delete_schedules_by_day(self, date_str):
+        """Xóa tất cả lịch trình trong một ngày cụ thể."""
+        try:
+            schedules_to_delete = self.get_schedules_by_date(date_str)
+            if not schedules_to_delete:
+                return f"ℹ️ Không có lịch nào để xóa cho ngày {date_str}."
+
+            ids_to_delete = [s[0] for s in schedules_to_delete]
+
+            # Xóa khỏi database local
+            cursor = self.conn.cursor()
+            placeholders = ','.join('?' for _ in ids_to_delete)
+            cursor.execute(f'DELETE FROM schedules WHERE id IN ({placeholders})', ids_to_delete)
+            self.conn.commit()
+
+            count = len(ids_to_delete)
+            self.send_notification(f"Đã xóa {count} lịch cho ngày {date_str}.")
+            return f"✅ Đã xóa thành công {count} lịch cho ngày {date_str}."
+        except Exception as e:
+            return f"❌ Lỗi khi xóa lịch theo ngày: {e}"
+
+    def delete_schedules_by_month(self, year, month):
+        """Xóa tất cả lịch trình trong một tháng cụ thể."""
+        try:
+            schedules_to_delete = self.get_schedules_by_month(year, month)
+            if not schedules_to_delete:
+                return f"ℹ️ Không có lịch nào để xóa cho tháng {month}/{year}."
+
+            ids_to_delete = [s[0] for s in schedules_to_delete]
+
+            # Xóa khỏi database local
+            cursor = self.conn.cursor()
+            placeholders = ','.join('?' for _ in ids_to_delete)
+            cursor.execute(f'DELETE FROM schedules WHERE id IN ({placeholders})', ids_to_delete)
+            self.conn.commit()
+
+            count = len(ids_to_delete)
+            self.send_notification(f"Đã xóa {count} lịch cho tháng {month}/{year}.")
+            return f"✅ Đã xóa thành công {count} lịch cho tháng {month}/{year}."
+        except Exception as e:
+            return f"❌ Lỗi khi xóa lịch theo tháng: {e}"
+
+    def delete_schedules_by_year(self, year):
+        """Xóa tất cả lịch trình trong một năm cụ thể."""
+        try:
+            schedules_to_delete = self.get_schedules_by_year(year)
+            if not schedules_to_delete:
+                return f"ℹ️ Không có lịch nào để xóa cho năm {year}."
+
+            ids_to_delete = [s[0] for s in schedules_to_delete]
+
+            # Xóa khỏi database local
+            cursor = self.conn.cursor()
+            placeholders = ','.join('?' for _ in ids_to_delete)
+            cursor.execute(f'DELETE FROM schedules WHERE id IN ({placeholders})', ids_to_delete)
+            self.conn.commit()
+
+            count = len(ids_to_delete)
+            self.send_notification(f"Đã xóa {count} lịch cho năm {year}.")
+            return f"✅ Đã xóa thành công {count} lịch cho năm {year}."
+        except Exception as e:
+            return f"❌ Lỗi khi xóa lịch theo năm: {e}"
+
+    def delete_schedules_by_time_range(self, start_time_str, end_time_str):
+        """Xóa tất cả các lịch trình chồng chéo với một khoảng thời gian nhất định."""
+        try:
+            from utils.timezone_utils import parse_time_to_vietnam
+
+            # Parse the time range for deletion
+            range_start = parse_time_to_vietnam(start_time_str)
+            range_end = parse_time_to_vietnam(end_time_str)
+
+            all_schedules = self.get_schedules()
+            schedules_to_delete = []
+
+            for schedule in all_schedules:
+                try:
+                    sch_start = parse_time_to_vietnam(schedule[3])  # start_time at index 3
+                    sch_end = parse_time_to_vietnam(schedule[4])  # end_time at index 4
+
+                    # Check for overlap: (StartA < EndB) and (EndA > StartB)
+                    if sch_start < range_end and sch_end > range_start:
+                        schedules_to_delete.append(schedule)
+                except Exception as e:
+                    print(f"[Debug] Could not parse schedule ID {schedule[0]} for deletion: {e}")
+                    continue
+
+            if not schedules_to_delete:
+                return f"ℹ️ Không có lịch nào để xóa trong khoảng từ {start_time_str} đến {end_time_str}."
+
+            ids_to_delete = [s[0] for s in schedules_to_delete]
+
+            # Delete from local database
+            cursor = self.conn.cursor()
+            placeholders = ','.join('?' for _ in ids_to_delete)
+            cursor.execute(f'DELETE FROM schedules WHERE id IN ({placeholders})', ids_to_delete)
+            self.conn.commit()
+
+            count = len(ids_to_delete)
+            self.send_notification(f"Đã xóa {count} lịch trong khoảng từ {start_time_str} đến {end_time_str}.")
+            return f"✅ Đã xóa thành công {count} lịch."
+        except Exception as e:
+            return f"❌ Lỗi khi xóa lịch theo khoảng thời gian: {e}"
 
     # sync_google_calendar được thay thế bởi GoogleCalendarService trong các phương thức CRUD
 

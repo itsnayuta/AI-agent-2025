@@ -36,7 +36,7 @@ class FunctionCallHandler:
             if name == "smart_add_schedule":
                 return self._handle_smart_add_schedule(args, user_input, executor)
             elif name == "get_schedules":
-                return self._handle_get_schedules(executor)
+                return self._handle_get_schedules(args,executor)
             elif name == "update_schedule":
                 return self._handle_update_schedule(args, executor)
             elif name == "delete_schedule":
@@ -176,31 +176,48 @@ class FunctionCallHandler:
         result = executor.add_schedule(title, description, start_time_str, end_time_str)
         return result
 
-    def _handle_get_schedules(self, executor: 'ExecuteSchedule') -> dict:
-        """Xử lý yêu cầu lấy danh sách lịch và trả về dưới dạng JSON."""
-        schedules = executor.get_schedules()
+    def _handle_get_schedules(self, args: Dict, executor: 'ExecuteSchedule') -> dict:
+        """Xử lý yêu cầu lấy danh sách lịch theo ngày, tháng, năm hoặc tất cả."""
+        date_str = args.get('date')  # YYYY-MM-DD
+        month = args.get('month')  # 1-12
+        year = args.get('year')  # YYYY
 
-        if not schedules:
+        try:
+            if date_str:
+                schedules = executor.get_schedules_by_date(date_str)
+                message = f"Danh sách lịch cho ngày {date_str}:"
+            elif year and month:
+                schedules = executor.get_schedules_by_month(year, int(month))
+                message = f"Danh sách lịch cho tháng {month}/{year}:"
+            elif year:
+                schedules = executor.get_schedules_by_year(year)
+                message = f"Danh sách lịch cho năm {year}:"
+            else:
+                schedules = executor.get_schedules()
+                message = "Đây là tất cả các lịch của bạn:"
+
+            if not schedules:
+                return {
+                    "message": "Không tìm thấy lịch nào phù hợp.",
+                    "schedules": []
+                }
+
+            schedule_list = [
+                {
+                    "id": s[0],
+                    "title": s[1],
+                    "description": s[2],
+                    "start_time": s[3],
+                    "end_time": s[4]
+                } for s in schedules
+            ]
+
             return {
-                "message": "Hiện tại chưa có lịch nào được lưu.",
-                "schedules": []
+                "message": message,
+                "schedules": schedule_list
             }
-
-        schedule_list = []
-        for schedule in schedules:
-            schedule_item = {
-                "id": schedule[0],
-                "title": schedule[1],
-                "description": schedule[2],
-                "start_time": schedule[3],
-                "end_time": schedule[4]
-            }
-            schedule_list.append(schedule_item)
-
-        return {
-            "message": "Danh sách lịch đã được lấy thành công.",
-            "schedules": schedule_list
-        }
+        except Exception as e:
+            return {"message": f"Đã xảy ra lỗi khi lấy lịch: {e}", "schedules": []}
 
     def _handle_update_schedule(self, args: Dict, executor: 'ExecuteSchedule') -> str:
         """Xử lý yêu cầu cập nhật lịch"""
