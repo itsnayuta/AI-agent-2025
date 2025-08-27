@@ -99,16 +99,13 @@ app = FastAPI(lifespan=lifespan)
 origins = ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  # Allows specified origins
-    allow_credentials=True, # Allows cookies to be included in requests
-    allow_methods=["*"],    # Allows all methods (GET, POST, etc.)
-    allow_headers=["*"],    # Allows all headers
+    allow_origins=origins,  # Cho phép các origin được chỉ định
+    allow_credentials=True, # Cho phép cookies được bao gồm trong requests
+    allow_methods=["*"],    # Cho phép tất cả methods (GET, POST, etc.)
+    allow_headers=["*"],    # Cho phép tất cả headers
 )
 
-# Mount static files (CSS, JS...)
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# Templates
+# Templates (Mẫu giao diện)
 templates = Jinja2Templates(directory="templates")
 
 # Include API router

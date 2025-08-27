@@ -1,4 +1,4 @@
-# Gemini AI Service
+# Dịch vụ Gemini AI
 import google.generativeai as genai
 import threading
 import queue
@@ -22,7 +22,7 @@ class GeminiService:
         )
 
     def _call_gemini_api(self, q: queue.Queue, system_prompt: str, functions: list, generation_config):
-        """Thread-safe Gemini API call"""
+        """Gọi API Gemini an toàn với thread"""
         try:
             response = self.model.generate_content(
                 system_prompt,
@@ -35,7 +35,7 @@ class GeminiService:
             q.put(e)
     
     def generate_with_timeout(self, system_prompt: str, functions: list) -> Any:
-        """Generate content with timeout handling"""
+        """Tạo nội dung với xử lý timeout"""
         q = queue.Queue()
         thread = threading.Thread(
             target=self._call_gemini_api, 
@@ -55,7 +55,7 @@ class GeminiService:
         return response
     
     def extract_function_call(self, response):
-        """Extract function call from Gemini response"""
+        """Trích xuất function call từ phản hồi Gemini"""
         try:
             if hasattr(response.candidates[0].content.parts[0], 'function_call'):
                 return response.candidates[0].content.parts[0].function_call
@@ -77,7 +77,7 @@ class GeminiService:
         # 1. Handle raw Gemini SDK response objects
         if isinstance(response, GenerateContentResponse):
             try:
-                # The .text property is the safest and most direct way to get text
+                # Thuộc tính .text là cách an toàn và trực tiếp nhất để lấy text
                 return response.text
             except AttributeError:
                 return "Lỗi: Không thể trích xuất nội dung từ phản hồi của AI."

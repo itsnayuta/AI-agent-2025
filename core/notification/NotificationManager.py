@@ -65,10 +65,13 @@ class NotificationManager:
     def test_email_send(self, test_email: str) -> Dict[str, Any]:
         """Test gửi email để kiểm tra cấu hình SMTP"""
         try:
-            subject = "Test Email - AI Agent Schedule Management"
-            body = f"""Test
-Thời gian test: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-Email nhận: {test_email}"""
+            subject = "Email Kiểm Tra - Hệ Thống Quản Lý Lịch Trình AI"
+            body = f"""Đây là email kiểm tra từ hệ thống quản lý lịch trình AI.
+
+Thời gian kiểm tra: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Email nhận: {test_email}
+
+Nếu bạn nhận được email này, cấu hình email đã hoạt động thành công!"""
 
             success = self.email_service.send_email(test_email, subject, body)
             

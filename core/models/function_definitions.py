@@ -129,16 +129,19 @@ def get_function_definitions() -> List[Dict[str, Any]]:
                 "required": ["email"]
             }
         },
-        # **MODIFIED FUNCTION**
         {
             "name": "handle_greeting_goodbye",
-            "description": "Xử lý các chủ đề hội thoại cơ bản như chào hỏi, cảm ơn, tạm biệt, hoặc các câu hỏi đơn giản như 'bạn là ai', 'bạn khỏe không'.",
+            "description": "Xử lý các chủ đề hội thoại cơ bản như chào hỏi, cảm ơn, tạm biệt, exit/quit, hoặc các câu hỏi đơn giản như 'bạn là ai', 'bạn khỏe không'. CHỈ sử dụng khi KHÔNG THỂ trả lời từ context có sẵn.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "message": {
                         "type": "string",
-                        "description": "Nội dung hội thoại của người dùng (ví dụ: 'Chào bạn', 'Cảm ơn', 'Bạn là ai?')."
+                        "description": "Nội dung hội thoại của người dùng (ví dụ: 'Chào bạn', 'Cảm ơn', 'Bạn là ai?', 'exit', 'quit', 'thoát')."
+                    },
+                    "is_exit": {
+                        "type": "boolean",
+                        "description": "True nếu người dùng muốn thoát/kết thúc cuộc trò chuyện (exit, quit, thoát, bye)."
                     }
                 },
                 "required": ["message"]

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request, Header, BackgroundTasks
+from fastapi import APIRouter, Depends, Request, Header, BackgroundTasks, HTTPException
 from typing import Any, Dict, Optional
 from pydantic import BaseModel
 
@@ -18,9 +18,22 @@ class EmailSetupRequest(BaseModel):
     email: str
 
 @router.post("/prompt", response_model=Dict[str, Any])
-def consultant_schedules(body: Prompt, agent: AIAgent = Depends(get_ai_agent)):
-    response = agent.process_user_input(body.content)
-    return {"result": response}
+def consultant_schedules(body: Prompt, session_id: str = "default"):
+    """Xử lý yêu cầu từ người dùng với session support."""
+    try:
+        agent = get_ai_agent(session_id)
+        response = agent.process_user_input(body.content)
+        return {
+            "result": response,
+            "session_id": session_id,
+            "success": True
+        }
+    except Exception as e:
+        return {
+            "result": f"Lỗi: {str(e)}",
+            "session_id": session_id,
+            "success": False
+        }
 
 @router.get("/notification-status")
 def get_notification_status():
@@ -140,3 +153,62 @@ def reset_google_webhook():
         
     except Exception as e:
         return {"error": str(e)}
+class SessionRequest(BaseModel):
+    session_id: str
+
+class ConversationSearchRequest(BaseModel):
+    query: str
+    limit: int = 10
+
+@router.get("/conversation/history")
+def get_conversation_history(session_id: str = "default", limit: Optional[int] = None):
+    """Lấy lịch sử conversation."""
+    try:
+        agent = AIAgent(session_id=session_id)
+        history = agent.get_conversation_history(limit)
+        return {
+            "session_id": session_id,
+            "history": history,
+            "total": len(history)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/conversation/stats")
+def get_conversation_stats(session_id: str = "default"):
+    """Lấy thống kê conversation."""
+    try:
+        agent = AIAgent(session_id=session_id)
+        stats = agent.get_conversation_stats()
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/conversation/clear")
+def clear_conversation(session_id: str = "default"):
+    """Xóa toàn bộ lịch sử conversation."""
+    try:
+        agent = AIAgent(session_id=session_id)
+        deleted_count = agent.clear_conversation_history()
+        return {
+            "message": f"Đã xóa {deleted_count} tin nhắn",
+            "session_id": session_id,
+            "deleted_count": deleted_count
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/conversation/search")
+def search_conversation(request: ConversationSearchRequest, session_id: str = "default"):
+    """Tìm kiếm trong lịch sử conversation."""
+    try:
+        agent = AIAgent(session_id=session_id)
+        results = agent.search_conversation(request.query, request.limit)
+        return {
+            "session_id": session_id,
+            "query": request.query,
+            "results": results,
+            "total": len(results)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

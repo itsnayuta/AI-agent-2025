@@ -41,3 +41,7 @@ class Config:
     # Notification Settings
     SCAN_INTERVAL = 60  # seconds
     REMINDER_MINUTES = 15  # minutes
+    
+    # Conversation Settings
+    MAX_CONVERSATION_HISTORY = 50  
+    CONTEXT_WINDOW_SIZE = 12  

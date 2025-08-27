@@ -1,10 +1,6 @@
-"""
-Timezone utilities for Vietnam timezone (UTC+7)
-"""
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-# Vietnam timezone (UTC+7)
 VIETNAM_TZ = timezone(timedelta(hours=7))
 
 def get_vietnam_now() -> datetime:
@@ -31,7 +27,7 @@ def format_vietnam_time(dt: datetime, format_str: str = "%Y-%m-%d %H:%M:%S") -> 
 def parse_time_to_vietnam(time_str: str) -> datetime:
     """Parse time string và chuyển sang múi giờ Việt Nam"""
     try:
-        # Parse ISO format
+        # Parse định dạng ISO
         if 'T' in time_str:
             dt = datetime.fromisoformat(time_str.replace('Z', '+00:00'))
         else:
