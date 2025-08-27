@@ -20,20 +20,20 @@ def check_schedule_overlap(conn: sqlite3.Connection, start_time: datetime, end_t
     Trả về True nếu KHÔNG có trùng lặp, False nếu có.
     """
     cursor = conn.cursor()
-    # Chuẩn hóa thời gian truyền vào về UTC trước khi so sánh,
-    # vì database lưu ở định dạng này.
-    start_utc = start_time.astimezone(pytz.utc)
-    end_utc = end_time.astimezone(pytz.utc)
-    start_str = start_utc.isoformat()
-    end_str = end_utc.isoformat()
-    # Tìm kiếm các lịch trình mà khoảng thời gian của chúng giao nhau với khoảng thời gian đầu vào
+    # Database lưu thời gian với timezone, nên ta giữ nguyên timezone để so sánh
+    start_str = start_time.isoformat()
+    end_str = end_time.isoformat()
+    
+    # Tìm kiếm các lịch trình có overlap với khoảng thời gian đầu vào
+    # Overlap xảy ra khi: NOT (new_end <= existing_start OR new_start >= existing_end)
     query = """
         SELECT COUNT(*) FROM schedules
-        WHERE (? < end_time AND ? > start_time)
+        WHERE NOT (? <= start_time OR ? >= end_time)
     """
     cursor.execute(query, (end_str, start_str))
     # Nếu số lượng lịch trình trùng lặp > 0, trả về False
-    return cursor.fetchone()[0] == 0
+    count = cursor.fetchone()[0]
+    return count == 0
 
 class ScheduleAdvisor:
     """
@@ -180,12 +180,23 @@ class ScheduleAdvisor:
             priority_norm, priority_provided = self._normalize_priority(priority, user_request)
             priority = priority_norm
 
-            # 1. Ưu tiên LLM gửi preferred_date, preferred_weekday
-            suggested_time = self._resolve_preferred_date(preferred_date, preferred_weekday)
+            # 1. Ưu tiên parse từ text trước (có thời gian cụ thể)
+            suggested_time = self._extract_time(user_request)
 
-            # 2. Nếu chưa có thì tự parse từ text
+            # 2. Nếu chưa có, dùng preferred_date/weekday nhưng cần có thời gian cụ thể
             if suggested_time is None:
-                suggested_time = self._extract_time(user_request)
+                date_time = self._resolve_preferred_date(preferred_date, preferred_weekday)
+                if date_time and preferred_time_of_day:
+                    # Combine date with time of day
+                    suggested_time = self._default_time_from_tod(preferred_time_of_day)
+                    if suggested_time and date_time:
+                        suggested_time = suggested_time.replace(
+                            year=date_time.year, 
+                            month=date_time.month, 
+                            day=date_time.day
+                        )
+                elif date_time:
+                    suggested_time = date_time
 
             # 3. Nếu vẫn chưa có, fallback dựa trên preferred_time_of_day
             if suggested_time is None and preferred_time_of_day:
@@ -195,21 +206,70 @@ class ScheduleAdvisor:
             if suggested_time is None:
                 return self._ask_for_more_info(user_request, duration_minutes, priority, duration_provided, priority_provided, preferred_time_of_day)
 
+            # 5. Kiểm tra trùng lịch với thời gian gốc trước khi validate
+            original_time = suggested_time
+            if original_time.tzinfo is None or original_time.tzinfo.utcoffset(original_time) is None:
+                original_time = self.vietnam_tz.localize(original_time)
+            
+            original_end_time = original_time + timedelta(minutes=duration_minutes)
+            has_conflict = not check_schedule_overlap(self.conn, original_time, original_end_time)
+            
+            # Lấy lịch hiện có để hiển thị
+            existing_schedules = self._get_schedules_for_day(original_time)
+            conflict_details = []
+            
+            if has_conflict:
+                # Tìm lịch trùng cụ thể để thông báo
+                for schedule in existing_schedules:
+                    schedule_start = datetime.fromisoformat(schedule['start_time'])
+                    schedule_end = datetime.fromisoformat(schedule['end_time'])
+                    if schedule_start.tzinfo is None:
+                        schedule_start = self.vietnam_tz.localize(schedule_start)
+                    if schedule_end.tzinfo is None:
+                        schedule_end = self.vietnam_tz.localize(schedule_end)
+                    
+                    # Kiểm tra overlap
+                    if not (original_end_time <= schedule_start or original_time >= schedule_end):
+                        # Convert to Vietnam time for display
+                        display_start = schedule_start.astimezone(self.vietnam_tz)
+                        display_end = schedule_end.astimezone(self.vietnam_tz)
+                        conflict_details.append(f"**{schedule['title']}** ({display_start.strftime('%H:%M')}-{display_end.strftime('%H:%M')})")
+
+            # 6. Validate và tìm thời gian thay thế
             adjusted_time, warnings = self._validate_business_time(suggested_time, duration_minutes, priority)
             alternatives = self._generate_alternative_times(adjusted_time, task_info)
-            existing_schedules = self._get_schedules_for_day(adjusted_time)
 
-            return {
-                'main_suggestion': f"Đề xuất chính: {adjusted_time.strftime('%A, %d/%m/%Y lúc %H:%M')}",
-                'duration': f"Thời lượng gợi ý: {duration_minutes} phút",
-                'priority': f"Mức độ ưu tiên: {priority}",
-                'warnings': warnings,
-                'alternatives': alternatives,
-                'existing_schedules': existing_schedules,
-                'suggested_time': suggested_time,
-                'adjusted_time': adjusted_time,
-                'status': 'success'
-            }
+            # 7. Tạo response với thông báo trùng lịch rõ ràng
+            if has_conflict:
+                conflict_message = f"⚠️ Thời gian {original_time.strftime('%H:%M')} đã trùng với: {', '.join(conflict_details)}"
+                warnings.insert(0, conflict_message)  # Thêm vào đầu danh sách warnings
+                
+                return {
+                    'main_suggestion': f"Đề xuất thay thế: {adjusted_time.strftime('%A, %d/%m/%Y lúc %H:%M')}",
+                    'duration': f"Thời lượng gợi ý: {duration_minutes} phút",
+                    'priority': f"Mức độ ưu tiên: {priority}",
+                    'warnings': warnings,
+                    'alternatives': alternatives,
+                    'existing_schedules': existing_schedules,
+                    'suggested_time': suggested_time,
+                    'adjusted_time': adjusted_time,
+                    'original_time': original_time,
+                    'has_conflict': True,
+                    'status': 'success'
+                }
+            else:
+                return {
+                    'main_suggestion': f"Đề xuất chính: {adjusted_time.strftime('%A, %d/%m/%Y lúc %H:%M')}",
+                    'duration': f"Thời lượng gợi ý: {duration_minutes} phút",
+                    'priority': f"Mức độ ưu tiên: {priority}",
+                    'warnings': warnings,
+                    'alternatives': alternatives,
+                    'existing_schedules': existing_schedules,
+                    'suggested_time': suggested_time,
+                    'adjusted_time': adjusted_time,
+                    'has_conflict': False,
+                    'status': 'success'
+                }
 
         except Exception as e:
             return {'main_suggestion': "Có lỗi xảy ra khi phân tích.", 'error': str(e), 'status': 'error'}
@@ -377,20 +437,32 @@ class ScheduleAdvisor:
         if adjusted_time.hour < business_start:
             warnings.append(f"Thời gian trước giờ làm việc. Đã điều chỉnh về {business_start}h.")
             adjusted_time = adjusted_time.replace(hour=business_start, minute=0)
+            end_time = adjusted_time + timedelta(minutes=duration)
         elif end_time.hour >= business_end:
             warnings.append(f"Thời gian sau giờ làm việc. Đã điều chỉnh về 9h sáng hôm sau.")
             adjusted_time = (adjusted_time + timedelta(days=1)).replace(hour=9, minute=0)
+            end_time = adjusted_time + timedelta(minutes=duration)
 
         # Điều chỉnh nếu thời gian trùng giờ ăn trưa
         lunch_start, lunch_end = self.lunch_time
         if (lunch_start <= adjusted_time.hour < lunch_end) or (lunch_start < end_time.hour <= lunch_end):
             warnings.append(f"Thời gian trùng giờ ăn trưa. Đã điều chỉnh về {lunch_end}h.")
             adjusted_time = adjusted_time.replace(hour=lunch_end, minute=0)
+            end_time = adjusted_time + timedelta(minutes=duration)
 
-        # Kiểm tra trùng lịch
-        if not check_schedule_overlap(self.conn, adjusted_time, adjusted_time + timedelta(minutes=duration)):
-            warnings.append("Thời gian này đã có lịch")
-            adjusted_time = self._find_next_available_slot(adjusted_time, duration, priority)
+        # QUAN TRỌNG: Kiểm tra trùng lịch - LUÔN tìm thời gian trống nếu bị trùng
+        max_attempts = 5  # Giới hạn số lần thử để tránh vòng lặp vô hạn
+        attempts = 0
+        
+        while not check_schedule_overlap(self.conn, adjusted_time, end_time) and attempts < max_attempts:
+            warnings.append(f"Thời gian {adjusted_time.strftime('%H:%M')} đã có lịch, đang tìm thời gian khác...")
+            try:
+                adjusted_time = self._find_next_available_slot(adjusted_time, duration, priority)
+                end_time = adjusted_time + timedelta(minutes=duration)
+                attempts += 1
+            except Exception as e:
+                warnings.append(f"Không thể tìm thấy thời gian trống phù hợp: {str(e)}")
+                break
 
         return adjusted_time, warnings
 
@@ -402,50 +474,145 @@ class ScheduleAdvisor:
         # Đảm bảo start_time có múi giờ
         if start_time.tzinfo is None or start_time.tzinfo.utcoffset(start_time) is None:
             start_time = self.vietnam_tz.localize(start_time)
+        
+        # Bắt đầu tìm từ ngày hiện tại
         search_date = start_time.date()
         max_search_days = 2 if priority == 'Cao' else 7
+        
+        # Tạo danh sách các khung giờ ưu tiên trong ngày (tránh giờ ăn trưa)
+        preferred_hours = []
+        business_start, business_end = self.business_hours
+        lunch_start, lunch_end = self.lunch_time
+        
+        for hour in range(business_start, business_end):
+            if hour < lunch_start or hour >= lunch_end:
+                preferred_hours.append(hour)
+        
         for i in range(max_search_days):
             current_date = search_date + timedelta(days=i)
+            
             # Bỏ qua cuối tuần
             if current_date.weekday() >= 5:
                 continue
+            
+            # Nếu là ngày hiện tại, chỉ tìm từ giờ hiện tại trở đi
+            if current_date == self.current_time.date():
+                current_hour = max(self.current_time.hour, business_start)
+                preferred_hours = [h for h in preferred_hours if h >= current_hour]
+            
+            # Thử từng khung giờ ưu tiên
+            for hour in preferred_hours:
+                for minute in [0, 30]:  # Thử cả giờ tròn và 30 phút
+                    candidate_time = datetime.combine(current_date, datetime.min.time()).replace(
+                        hour=hour, minute=minute, tzinfo=self.vietnam_tz
+                    )
+                    candidate_end = candidate_time + timedelta(minutes=duration)
+                    
+                    # Kiểm tra không vượt quá giờ làm việc
+                    if candidate_end.hour > business_end:
+                        continue
+                    
+                    # Kiểm tra không trùng với lịch hiện có
+                    if check_schedule_overlap(self.conn, candidate_time, candidate_end):
+                        return candidate_time
+            
+            # Nếu không tìm được trong các khung giờ ưu tiên, tìm bất kỳ khoảng trống nào
             schedules_on_day = self._get_schedules_for_day(datetime.combine(current_date, datetime.min.time()).replace(tzinfo=self.vietnam_tz))
+            
             if not schedules_on_day:
-                return datetime.combine(current_date, datetime.min.time()).replace(hour=self.business_hours[0], minute=0, tzinfo=self.vietnam_tz)
+                # Không có lịch nào trong ngày, trả về giờ bắt đầu làm việc
+                return datetime.combine(current_date, datetime.min.time()).replace(
+                    hour=business_start, minute=0, tzinfo=self.vietnam_tz
+                )
+            
+            # Sắp xếp lịch theo thời gian bắt đầu
             sorted_schedules = sorted(schedules_on_day, key=lambda x: datetime.fromisoformat(x['start_time']))
-            last_end_time = datetime.combine(current_date, datetime.min.time()).replace(hour=self.business_hours[0], minute=0, tzinfo=self.vietnam_tz)
+            
+            # Tìm khoảng trống giữa các lịch
+            last_end_time = datetime.combine(current_date, datetime.min.time()).replace(
+                hour=business_start, minute=0, tzinfo=self.vietnam_tz
+            )
+            
             for schedule in sorted_schedules:
-                # Đọc từ DB và chuẩn hóa múi giờ
                 current_start = datetime.fromisoformat(schedule['start_time'])
                 if current_start.tzinfo is None:
                     current_start = self.vietnam_tz.localize(current_start)
+                
+                # Kiểm tra khoảng trống trước lịch này
                 if (current_start - last_end_time).total_seconds() >= duration * 60:
-                    return last_end_time
+                    # Kiểm tra không trùng giờ ăn trưa
+                    if not (lunch_start <= last_end_time.hour < lunch_end):
+                        return last_end_time
+                
+                # Cập nhật thời gian kết thúc cuối cùng
                 last_end_time = datetime.fromisoformat(schedule['end_time'])
                 if last_end_time.tzinfo is None:
                     last_end_time = self.vietnam_tz.localize(last_end_time)
-            end_of_business_day = datetime.combine(current_date, datetime.min.time()).replace(hour=self.business_hours[1], minute=0, tzinfo=self.vietnam_tz)
+                
+                # Nếu kết thúc trong giờ ăn trưa, chuyển đến sau giờ ăn trưa
+                if lunch_start <= last_end_time.hour < lunch_end:
+                    last_end_time = last_end_time.replace(hour=lunch_end, minute=0)
+            
+            # Kiểm tra khoảng trống cuối ngày
+            end_of_business_day = datetime.combine(current_date, datetime.min.time()).replace(
+                hour=business_end, minute=0, tzinfo=self.vietnam_tz
+            )
+            
             if (end_of_business_day - last_end_time).total_seconds() >= duration * 60:
                 return last_end_time
-        raise Exception("Không tìm thấy khung giờ trống phù hợp trong vòng 7 ngày tới.")
+        
+        # Nếu không tìm thấy trong khoảng thời gian cho phép, ném exception
+        raise Exception(f"Không tìm thấy khung giờ trống phù hợp trong vòng {max_search_days} ngày tới.")
 
     def _generate_alternative_times(self, base_time: datetime, task_info: Dict) -> List[str]:
-        """Tạo các gợi ý thời gian thay thế."""
+        """Tạo các gợi ý thời gian thay thế không trùng với lịch hiện có."""
         alternatives = []
+        duration = task_info.get('duration', 60)
         best_start, best_end = task_info.get('best_time', self.business_hours)
-        suggestion_hours = sorted([best_start, best_start + 2, best_end - 1])
+        
+        # Đảm bảo base_time có timezone
+        if base_time.tzinfo is None or base_time.tzinfo.utcoffset(base_time) is None:
+            base_time = self.vietnam_tz.localize(base_time)
+        
+        # Tạo danh sách các khung giờ gợi ý trong cùng ngày
+        suggestion_hours = []
+        business_start, business_end = self.business_hours
+        lunch_start, lunch_end = self.lunch_time
+        
+        # Thêm các khung giờ phổ biến (tránh giờ ăn trưa)
+        for hour in [8, 9, 10, 11, 14, 15, 16]:
+            if business_start <= hour < business_end and (hour < lunch_start or hour >= lunch_end):
+                suggestion_hours.append(hour)
+        
+        # Thử các khung giờ trong cùng ngày
         for hour in suggestion_hours:
             alt_time = base_time.replace(hour=hour, minute=0)
-            if alt_time > self.current_time and check_schedule_overlap(self.conn, alt_time, alt_time + timedelta(minutes=task_info['duration'])):
-                alternatives.append(alt_time.strftime('%H:%M %A, %d/%m/%Y'))
-        next_day = base_time + timedelta(days=1)
-        if next_day.weekday() >= 5:
-            days_to_add = 7 - next_day.weekday()
-            next_day += timedelta(days=days_to_add)
-        alt_time = next_day.replace(hour=self.business_hours[0], minute=0)
-        if check_schedule_overlap(self.conn, alt_time, alt_time + timedelta(minutes=task_info['duration'])):
-            alternatives.append(alt_time.strftime('%H:%M %A, %d/%m/%Y'))
-        return list(set(alternatives))[:3]
+            if alt_time > self.current_time:
+                alt_end = alt_time + timedelta(minutes=duration)
+                if check_schedule_overlap(self.conn, alt_time, alt_end):
+                    alternatives.append(alt_time.strftime('%H:%M %A, %d/%m/%Y'))
+        
+        # Thử ngày hôm sau và các ngày tiếp theo
+        for days_ahead in [1, 2, 3]:
+            next_day = base_time + timedelta(days=days_ahead)
+            
+            # Bỏ qua cuối tuần
+            if next_day.weekday() >= 5:
+                continue
+            
+            # Thử một vài khung giờ phổ biến trong ngày mới
+            for hour in [8, 9, 14, 15]:
+                if business_start <= hour < business_end:
+                    alt_time = next_day.replace(hour=hour, minute=0)
+                    alt_end = alt_time + timedelta(minutes=duration)
+                    
+                    if check_schedule_overlap(self.conn, alt_time, alt_end):
+                        alternatives.append(alt_time.strftime('%H:%M %A, %d/%m/%Y'))
+                        break  # Chỉ lấy 1 thời gian mỗi ngày
+        
+        # Loại bỏ trùng lặp và giới hạn số lượng
+        unique_alternatives = list(dict.fromkeys(alternatives))  # Giữ thứ tự và loại bỏ trùng
+        return unique_alternatives[:3]
 
     def _get_schedules_for_day(self, target_date: datetime) -> List[Dict[str, str]]:
         """Lấy tất cả các lịch hẹn trong một ngày cụ thể."""
@@ -466,24 +633,83 @@ class ScheduleAdvisor:
 
     def format_response(self, response: Dict) -> str:
         if response['status'] == 'success':
-            result = f"### Gợi ý Lịch trình\n---\n"
-            result += f"**{response['main_suggestion']}**\n"
-            result += f"**{response['duration']}**\n"
-            result += f"**{response['priority']}**\n"
-            if response.get('existing_schedules'):
-                result += "\n### Lịch trình đã có trong ngày\n---\n"
-                for schedule in response['existing_schedules']:
-                    start_time_str = datetime.fromisoformat(schedule['start_time']).strftime('%H:%M')
-                    end_time_str = datetime.fromisoformat(schedule['end_time']).strftime('%H:%M')
-                    result += f"  - **{schedule['title']}**: từ {start_time_str} đến {end_time_str}\n"
-            if response.get('warnings'):
-                result += "\n### Lưu ý\n---\n"
-                for warning in response['warnings']:
-                    result += f"  - {warning}\n"
-            if response.get('alternatives'):
-                result += "\n### Thời gian thay thế\n---\n"
-                for alt in response['alternatives']:
-                    result += f"  - {alt}\n"
+            # Kiểm tra nếu có trùng lịch
+            if response.get('has_conflict', False):
+                result = f"### ⚠️ Phát hiện trùng lịch\n---\n"
+                result += f"**{response['main_suggestion']}**\n"
+                result += f"**{response['duration']}**\n"
+                result += f"**{response['priority']}**\n"
+                
+                # Hiển thị thông báo trùng lịch trước
+                if response.get('warnings'):
+                    result += "\n### 🚨 Thông báo trùng lịch\n---\n"
+                    for i, warning in enumerate(response['warnings']):
+                        if i == 0:  # Warning đầu tiên là thông báo trùng lịch
+                            result += f"  - {warning}\n"
+                        else:
+                            break
+                
+                # Hiển thị lịch hiện có
+                if response.get('existing_schedules'):
+                    result += "\n### 📅 Lịch trình hiện có trong ngày\n---\n"
+                    for schedule in response['existing_schedules']:
+                        start_dt = datetime.fromisoformat(schedule['start_time'])
+                        end_dt = datetime.fromisoformat(schedule['end_time'])
+                        
+                        # Convert to Vietnam timezone for display
+                        if start_dt.tzinfo is not None:
+                            start_dt = start_dt.astimezone(self.vietnam_tz)
+                        if end_dt.tzinfo is not None:
+                            end_dt = end_dt.astimezone(self.vietnam_tz)
+                            
+                        start_time_str = start_dt.strftime('%H:%M')
+                        end_time_str = end_dt.strftime('%H:%M')
+                        result += f"  - **{schedule['title']}**: từ {start_time_str} đến {end_time_str}\n"
+                
+                # Hiển thị các lưu ý khác (ngoài trừ thông báo trùng lịch đầu tiên)
+                other_warnings = response.get('warnings', [])[1:] if response.get('warnings') else []
+                if other_warnings:
+                    result += "\n### ⚡ Lưu ý khác\n---\n"
+                    for warning in other_warnings:
+                        result += f"  - {warning}\n"
+                
+                # Hiển thị thời gian thay thế
+                if response.get('alternatives'):
+                    result += "\n### 🔄 Thời gian thay thế khác\n---\n"
+                    for alt in response['alternatives']:
+                        result += f"  - {alt}\n"
+            else:
+                # Trường hợp không có trùng lịch
+                result = f"### Gợi ý Lịch trình\n---\n"
+                result += f"**{response['main_suggestion']}**\n"
+                result += f"**{response['duration']}**\n"
+                result += f"**{response['priority']}**\n"
+                
+                if response.get('existing_schedules'):
+                    result += "\n### Lịch trình đã có trong ngày\n---\n"
+                    for schedule in response['existing_schedules']:
+                        start_dt = datetime.fromisoformat(schedule['start_time'])
+                        end_dt = datetime.fromisoformat(schedule['end_time'])
+                        
+                        # Convert to Vietnam timezone for display
+                        if start_dt.tzinfo is not None:
+                            start_dt = start_dt.astimezone(self.vietnam_tz)
+                        if end_dt.tzinfo is not None:
+                            end_dt = end_dt.astimezone(self.vietnam_tz)
+                            
+                        start_time_str = start_dt.strftime('%H:%M')
+                        end_time_str = end_dt.strftime('%H:%M')
+                        result += f"  - **{schedule['title']}**: từ {start_time_str} đến {end_time_str}\n"
+                        
+                if response.get('warnings'):
+                    result += "\n### Lưu ý\n---\n"
+                    for warning in response['warnings']:
+                        result += f"  - {warning}\n"
+                        
+                if response.get('alternatives'):
+                    result += "\n### Thời gian thay thế\n---\n"
+                    for alt in response['alternatives']:
+                        result += f"  - {alt}\n"
         elif response['status'] == 'need_more_info':
             result = f"### Cần thêm thông tin\n---\n"
             result += f"**{response['main_suggestion']}**\n"
