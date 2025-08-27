@@ -18,11 +18,11 @@ class EmailSetupRequest(BaseModel):
     email: str
 
 @router.post("/prompt", response_model=Dict[str, Any])
-def consultant_schedules(body: Prompt, session_id: str = "default"):
+async def consultant_schedules(body: Prompt, session_id: str = "default"):
     """Xử lý yêu cầu từ người dùng với session support."""
     try:
         agent = get_ai_agent(session_id)
-        response = agent.process_user_input(body.content)
+        response = await agent.process_user_input(body.content)
         return {
             "result": response,
             "session_id": session_id,

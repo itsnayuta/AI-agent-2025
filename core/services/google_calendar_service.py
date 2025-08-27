@@ -56,12 +56,20 @@ class GoogleCalendarService:
 
     # ------------- DB Helpers -------------
     def _get_conn(self) -> sqlite3.Connection:
-        return sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=30, check_same_thread=False)
+
+        conn.execute("PRAGMA journal_mode=WAL;")
+
+        conn.execute("PRAGMA busy_timeout = 30000;")
+
+        conn.row_factory = sqlite3.Row
+        return conn
 
     def _ensure_sync_tables(self):
         conn = self._get_conn()
         try:
             cur = conn.cursor()
+            # trạng thái sync/watch
             cur.execute('''
                 CREATE TABLE IF NOT EXISTS google_sync_state (
                     id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -77,6 +85,26 @@ class GoogleCalendarService:
             cur.execute('SELECT id FROM google_sync_state WHERE id = 1')
             if cur.fetchone() is None:
                 cur.execute('INSERT INTO google_sync_state (id) VALUES (1)')
+
+            # bảng schedules (tạo tập trung, cùng lúc tạo index hiệu năng)
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS schedules (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT,
+                    description TEXT,
+                    start_time TEXT,
+                    end_time TEXT,
+                    created_at TEXT,
+                    google_event_id TEXT,
+                    google_etag TEXT,
+                    google_updated TEXT,
+                    deleted INTEGER DEFAULT 0
+                )
+            ''')
+            # index để kiểm tra xung đột và truy vấn nhanh
+            cur.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_schedules_google_event_id ON schedules(google_event_id)')
+            cur.execute('CREATE INDEX IF NOT EXISTS idx_schedules_start_end ON schedules(start_time, end_time)')
+
             conn.commit()
         finally:
             conn.close()
@@ -300,45 +328,34 @@ class GoogleCalendarService:
         conn = self._get_conn()
         try:
             cur = conn.cursor()
-            cur.execute('''
-                CREATE TABLE IF NOT EXISTS schedules (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT,
-                    description TEXT,
-                    start_time TEXT,
-                    end_time TEXT,
-                    created_at TEXT,
-                    google_event_id TEXT,
-                    google_etag TEXT,
-                    google_updated TEXT,
-                    deleted INTEGER DEFAULT 0
-                )
-            ''')
-
-            cur.execute('SELECT id, deleted FROM schedules WHERE google_event_id = ?', (google_id,))
-            row = cur.fetchone()
-
+            # Bảng schedules đã được tạo trong _ensure_sync_tables với UNIQUE index
+            # Nếu sự kiện bị huỷ
             if status == 'cancelled':
+                cur.execute('SELECT id FROM schedules WHERE google_event_id = ?', (google_id,))
+                row = cur.fetchone()
                 if row:
-                    cur.execute('UPDATE schedules SET deleted = 1 WHERE id = ?', (row[0],))
-
+                    cur.execute('UPDATE schedules SET deleted = 1 WHERE id = ?', (row['id'],))
                 conn.commit()
                 return
 
-            if row:
-                # Update existing row
-                cur.execute('''
-                    UPDATE schedules
-                    SET title = ?, description = ?, start_time = ?, end_time = ?, google_etag = ?, google_updated = ?, deleted = 0
-                    WHERE google_event_id = ?
-                ''', (summary, description, start_dt, end_dt, etag, updated, google_id))
-            else:
-                # Create new row
-                from utils.timezone_utils import get_vietnam_timestamp
-                cur.execute('''
-                    INSERT INTO schedules (title, description, start_time, end_time, created_at, google_event_id, google_etag, google_updated, deleted)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
-                ''', (summary, description, start_dt, end_dt, get_vietnam_timestamp(), google_id, etag, updated))
+            # Sử dụng UPSERT (ON CONFLICT) để tránh race/duplicate và cập nhật an toàn
+            from utils.timezone_utils import get_vietnam_timestamp
+            cur.execute('''
+                INSERT INTO schedules (title, description, start_time, end_time, created_at, google_event_id, google_etag, google_updated, deleted)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+                ON CONFLICT(google_event_id) DO UPDATE SET
+                    title=excluded.title,
+                    description=excluded.description,
+                    start_time=excluded.start_time,
+                    end_time=excluded.end_time,
+                    google_etag=excluded.google_etag,
+                    google_updated=excluded.google_updated,
+                    deleted=0
+            ''', (
+                summary, description, start_dt, end_dt,
+                get_vietnam_timestamp(),
+                google_id, etag, updated
+            ))
             conn.commit()
         finally:
             conn.close()
@@ -380,5 +397,78 @@ class GoogleCalendarService:
         time_min_iso = now_utc.isoformat() + 'Z'
         time_max_iso = (now_utc + datetime.timedelta(days=days)).isoformat() + 'Z'
         return self.backfill_range(time_min_iso, time_max_iso, calendar_id=calendar_id)
+
+    # ------------- Conflict Detection & Time Slot Helpers -------------
+    def is_time_slot_free(self, start_iso: str, end_iso: str, exclude_google_id: Optional[str] = None) -> bool:
+        """
+        Kiểm tra khoảng thời gian [start_iso, end_iso) có trùng event local (deleted=0).
+        Trả về True nếu trống.
+        """
+        conn = self._get_conn()
+        try:
+            cur = conn.cursor()
+            query = '''
+                SELECT 1 FROM schedules
+                WHERE deleted = 0
+                AND NOT (end_time <= ? OR start_time >= ?)
+            '''
+            params = (start_iso, end_iso)
+            if exclude_google_id:
+                query += ' AND (google_event_id IS NULL OR google_event_id != ?)'
+                params = (start_iso, end_iso, exclude_google_id)
+            cur.execute(query, params)
+            return cur.fetchone() is None
+        finally:
+            conn.close()
+
+    def find_conflicts(self, start_iso: str, end_iso: str) -> List[Dict[str, Any]]:
+        """
+        Trả về danh sách event local xung đột với khoảng thời gian.
+        """
+        conn = self._get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute('''
+                SELECT id, title, start_time, end_time, google_event_id FROM schedules
+                WHERE deleted = 0
+                AND NOT (end_time <= ? OR start_time >= ?)
+                ORDER BY start_time
+            ''', (start_iso, end_iso))
+            rows = cur.fetchall()
+            return [dict(row) for row in rows]
+        finally:
+            conn.close()
+
+    def propose_time_slots(self, desired_start_iso: str, desired_end_iso: str, alternatives: int = 3, shifts_minutes: List[int] = None) -> List[Dict[str, str]]:
+        """
+        Nếu slot mong muốn conflict, trả về tối đa `alternatives` phương án thay thế.
+        Mặc định thử shifts: +30, -30, +60, -60, +1440 (ngày kế).
+        Trả về list các dict {start, end, note}.
+        """
+        import datetime as _dt
+        if shifts_minutes is None:
+            shifts_minutes = [30, -30, 60, -60, 1440]
+
+        # nếu slot trống => trả về chính nó
+        if self.is_time_slot_free(desired_start_iso, desired_end_iso):
+            return [{"start": desired_start_iso, "end": desired_end_iso, "note": "Trống"}]
+
+        results: List[Dict[str, str]] = []
+        try:
+            base_start = _dt.datetime.fromisoformat(desired_start_iso)
+            base_end = _dt.datetime.fromisoformat(desired_end_iso)
+        except Exception:
+            # nếu không parse được thì không propose
+            return results
+
+        for minutes in shifts_minutes:
+            if len(results) >= alternatives:
+                break
+            alt_start = (base_start + _dt.timedelta(minutes=minutes)).isoformat()
+            alt_end = (base_end + _dt.timedelta(minutes=minutes)).isoformat()
+            if self.is_time_slot_free(alt_start, alt_end):
+                results.append({"start": alt_start, "end": alt_end, "note": f"Đề xuất (dịch {minutes} phút)"})
+
+        return results
 
 

@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-import random
 import re
 from typing import Dict
 
@@ -16,7 +15,7 @@ class FunctionCallHandler:
         self.functions = get_function_definitions()
         self.agent = GeminiService()
 
-    def handle_function_call(self, call, user_input: str) -> str | dict:
+    async def handle_function_call(self, call, user_input: str) -> str | dict:
         """Xử lý các hàm cho Agent AI"""
         name = call.name
         args = call.args if hasattr(call, 'args') else {}
@@ -25,7 +24,7 @@ class FunctionCallHandler:
 
         try:
             if name == "advise_schedule":
-                return self._handle_advise_schedule(args, user_input)
+                return await self._handle_advise_schedule(args, user_input)
             elif name == "handle_greeting_goodbye":
                 return self._handle_greeting_goodbye(args)
             elif name == "handle_off_topic_query":
@@ -95,9 +94,23 @@ class FunctionCallHandler:
         except Exception as e:
             return "Xin lỗi, chuyên môn của tôi là về lịch trình. Bạn cần giúp gì về việc đó không?"
 
-    def _handle_advise_schedule(self, args: Dict, user_input: str) -> str:
-        """Xử lý tư vấn lịch"""
+    async def _handle_advise_schedule(self, args: Dict, user_input: str) -> str:
+        """Xử lý tư vấn lịch với Gemini AI thông minh"""
         user_request = args.get('user_request', user_input)
+        
+        try:
+            # Đảm bảo advisor có llm
+            if not self.advisor.llm and hasattr(self, 'agent'):
+                self.advisor.llm = self.agent
+            
+            # Sử dụng tư vấn thông minh mới
+            intelligent_response = await self.advisor.intelligent_schedule_advice(user_request)
+            if intelligent_response and len(intelligent_response.strip()) > 0:
+                return intelligent_response
+        except Exception as e:
+            print(f"Lỗi khi sử dụng tư vấn thông minh: {e}")
+        
+        # Fallback về phương thức truyền thống
         preferred_time_of_day = args.get('preferred_time_of_day')
         duration = args.get('duration')
         priority = args.get('priority')
@@ -113,7 +126,6 @@ class FunctionCallHandler:
         )
         return self.advisor.format_response(result)
 
-        # (The rest of your handler methods: _handle_smart_add_schedule, etc. remain the same)
     def _handle_smart_add_schedule(self, args: Dict, user_input: str, executor: ExecuteSchedule) -> str:
         """Xử lý thêm lịch thông minh"""
         user_request = args.get('user_request', user_input)
@@ -125,7 +137,6 @@ class FunctionCallHandler:
         if start_time_str:
             # Gemini đã parse được thời gian
             from utils.timezone_utils import parse_time_to_vietnam, vietnam_isoformat, get_vietnam_now
-            from datetime import datetime
 
             try:
                 start_time_vn = parse_time_to_vietnam(start_time_str)
