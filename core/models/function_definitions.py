@@ -68,8 +68,25 @@ def get_function_definitions() -> List[Dict[str, Any]]:
         },
         {
             "name": "get_schedules",
-            "description": "Lấy danh sách tất cả lịch đã lưu.",
-            "parameters": {"type": "object", "properties": {}, "required": []},
+            "description": "Lấy danh sách lịch đã lưu. Có thể lọc theo ngày, tháng, hoặc năm.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "date": {
+                        "type": "string",
+                        "description": "Ngày cụ thể để lọc lịch, định dạng YYYY-MM-DD."
+                    },
+                    "month": {
+                        "type": "integer",
+                        "description": "Tháng để lọc lịch (số từ 1-12). Cần có 'year'."
+                    },
+                    "year": {
+                        "type": "integer",
+                        "description": "Năm để lọc lịch."
+                    }
+                },
+                "required": []
+            },
         },
         {
             "name": "update_schedule",
@@ -103,16 +120,32 @@ def get_function_definitions() -> List[Dict[str, Any]]:
         },
         {
             "name": "delete_schedule",
-            "description": "Xóa lịch khỏi hệ thống.",
+            "description": "Xóa (các) lịch khỏi hệ thống dựa trên khoảng thời gian, ngày, tháng hoặc năm.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "schedule_id": {
+                    "start_time": {
+                        "type": "string",
+                        "description": "Thời gian bắt đầu của khoảng thời gian cần xóa lịch (YYYY-MM-DD HH:MM:SS)."
+                    },
+                    "end_time": {
+                        "type": "string",
+                        "description": "Thời gian kết thúc của khoảng thời gian cần xóa lịch (YYYY-MM-DD HH:MM:SS)."
+                    },
+                    "date": {
+                        "type": "string",
+                        "description": "Ngày cụ thể để xóa tất cả lịch trong ngày đó (YYYY-MM-DD)."
+                    },
+                    "month": {
                         "type": "integer",
-                        "description": "ID của lịch cần xóa",
+                        "description": "Tháng cụ thể để xóa tất cả lịch trong tháng đó (cần có 'year')."
+                    },
+                    "year": {
+                        "type": "integer",
+                        "description": "Năm cụ thể để xóa tất cả lịch trong năm đó."
                     }
                 },
-                "required": ["schedule_id"]
+                "required": []
             }
         },
         {
