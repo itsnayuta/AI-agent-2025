@@ -210,12 +210,12 @@ def _check_and_send_notifications(self):
 
 ```mermaid
 graph TD
-    A[User Input: "Thêm lịch họp vào 9h sáng mai"] --> B[AI Agent]
+    A[User Input] --> B[AI Agent]
     B --> C{Phân tích với Gemini}
-    C --> D[Extract: smart_add_schedule]
-    D --> E[ScheduleAdvisor.parse_time]
+    C --> D[Extract Function Call]
+    D --> E[ScheduleAdvisor Parse Time]
     E --> F{Thời gian hợp lệ?}
-    F -->|Yes| G[ExecuteSchedule.add_schedule]
+    F -->|Yes| G[ExecuteSchedule Add]
     F -->|No| H[Yêu cầu thông tin thêm]
     G --> I[Lưu vào SQLite]
     I --> J[Đồng bộ Google Calendar]
@@ -228,9 +228,9 @@ graph TD
 ```mermaid
 graph TD
     A[Google Calendar Change] --> B[Webhook Trigger]
-    B --> C[schedule_router.google_webhook]
+    B --> C[Schedule Router Webhook]
     C --> D[Background Task]
-    D --> E[GoogleCalendarService.sync_from_google]
+    D --> E[Google Calendar Service Sync]
     E --> F[Lấy changes với syncToken]
     F --> G[Cập nhật local database]
     G --> H[Log sync result]
