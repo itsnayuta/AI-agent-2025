@@ -1,45 +1,44 @@
 from typing import List, Dict, Any
 
-
 def get_function_definitions() -> List[Dict[str, Any]]:
     """Định nghĩa các function cho Gemini AI"""
     return [
         {
-                "name": "advise_schedule",
-    "description": "Tư vấn lập lịch, trả về ngày/thời gian cụ thể hoặc yêu cầu thêm thông tin.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "user_request": {
-                "type": "string",
-                "description": "Yêu cầu lập lịch của người dùng, ví dụ: 'Họp team vào thứ 6 tuần này'."
-            },
-            "preferred_time_of_day": {
-                "type": "string",
-                "enum": ["sáng", "chiều", "tối"],
-                "description": "Khung thời gian mong muốn."
-            },
-            "preferred_date": {
-                "type": "string",
-                "description": "Ngày cụ thể người dùng yêu cầu, format YYYY-MM-DD (nếu xác định được)."
-            },
-            "preferred_weekday": {
-                "type": "string",
-                "enum": ["Thứ 2","Thứ 3","Thứ 4","Thứ 5","Thứ 6","Thứ 7","Chủ nhật"],
-                "description": "Ngày trong tuần mà người dùng yêu cầu (nếu có)."
-            },
-            "duration": {
-                "type": "string",
-                "description": "Thời lượng ước tính của lịch (ví dụ: '2 tiếng', '30 phút')."
-            },
-            "priority": {
-                "type": "string",
-                "enum": ["cao", "trung bình", "thấp"],
-                "description": "Mức độ ưu tiên (nếu có)."
+            "name": "advise_schedule",
+            "description": "Tư vấn lập lịch, trả về ngày/thời gian cụ thể hoặc yêu cầu thêm thông tin.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_request": {
+                        "type": "string",
+                        "description": "Yêu cầu lập lịch của người dùng, ví dụ: 'Họp team vào thứ 6 tuần này'."
+                    },
+                    "preferred_time_of_day": {
+                        "type": "string",
+                        "enum": ["sáng", "chiều", "tối"],
+                        "description": "Khung thời gian mong muốn."
+                    },
+                    "preferred_date": {
+                        "type": "string",
+                        "description": "Ngày cụ thể người dùng yêu cầu, format YYYY-MM-DD (nếu xác định được)."
+                    },
+                    "preferred_weekday": {
+                        "type": "string",
+                        "enum": ["Thứ 2","Thứ 3","Thứ 4","Thứ 5","Thứ 6","Thứ 7","Chủ nhật"],
+                        "description": "Ngày trong tuần mà người dùng yêu cầu (nếu có)."
+                    },
+                    "duration": {
+                        "type": "string",
+                        "description": "Thời lượng ước tính của lịch (ví dụ: '2 tiếng', '30 phút')."
+                    },
+                    "priority": {
+                        "type": "string",
+                        "enum": ["cao", "trung bình", "thấp"],
+                        "description": "Mức độ ưu tiên (nếu có)."
+                    }
+                },
+                "required": ["user_request"]
             }
-        },
-        "required": ["user_request"]
-    }
         },
         {
             "name": "smart_add_schedule",
@@ -113,7 +112,6 @@ def get_function_definitions() -> List[Dict[str, Any]]:
                         "description": "ID của lịch cần xóa",
                     }
                 },
-
                 "required": ["schedule_id"]
             }
         },
@@ -129,6 +127,35 @@ def get_function_definitions() -> List[Dict[str, Any]]:
                     }
                 },
                 "required": ["email"]
+            }
+        },
+        # **MODIFIED FUNCTION**
+        {
+            "name": "handle_greeting_goodbye",
+            "description": "Xử lý các chủ đề hội thoại cơ bản như chào hỏi, cảm ơn, tạm biệt, hoặc các câu hỏi đơn giản như 'bạn là ai', 'bạn khỏe không'.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string",
+                        "description": "Nội dung hội thoại của người dùng (ví dụ: 'Chào bạn', 'Cảm ơn', 'Bạn là ai?')."
+                    }
+                },
+                "required": ["message"]
+            }
+        },
+        {
+            "name": "handle_off_topic_query",
+            "description": "Phản hồi khi yêu cầu của người dùng không liên quan đến việc lập lịch hoặc các chức năng có sẵn.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Câu hỏi hoặc yêu cầu không liên quan của người dùng (ví dụ: 'Thời tiết hôm nay thế nào?', 'Bạn có thể kể chuyện cười không?')."
+                    }
+                },
+                "required": ["query"]
             }
         }
     ]

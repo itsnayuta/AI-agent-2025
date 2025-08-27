@@ -2,49 +2,42 @@ from datetime import datetime, timedelta
 import random
 import re
 from typing import Dict
+
+from core.models.function_definitions import get_function_definitions
 from core.services.ScheduleAdvisor import ScheduleAdvisor
 from core.services.ExecuteSchedule import ExecuteSchedule
 from core.notification import get_notification_manager
+from core.services.gemini_service import GeminiService
 
 
-def _handle_irrelevant_input(user_input: str) -> str | None:
-    user_input_lower = user_input.lower().strip()
-    scheduling_keywords = [
-        "lịch", "lịch trình", "cuộc hẹn", "sự kiện", "công việc", "kế hoạch",
-        "nhắc", "đặt", "tạo", "thêm", "xóa", "sửa", "cập nhật", "hủy",
-        "kiểm tra", "xem", "tìm", "liệt kê", "tư vấn", "gợi ý",
-        "hôm nay", "ngày mai", "ngày kia", "tuần này", "tuần sau", "tháng này",
-        "thứ hai", "thứ ba", "giờ", "phút"
-    ]
-
-    is_relevant = any(word in user_input_lower for word in scheduling_keywords)
-
-    if not is_relevant:
-        irrelevant_responses = [
-            "Xin lỗi, tôi chưa hiểu rõ yêu cầu của bạn. Chuyên môn của tôi là hỗ trợ quản lý lịch trình. Bạn có muốn đặt một lịch hẹn không?",
-            "Tôi có thể chưa được lập trình để xử lý yêu cầu này. Bạn có thể thử yêu cầu tôi 'thêm lịch đi khám răng vào 3 giờ chiều mai' không?",
-            "Rất tiếc, tôi chỉ có thể giúp bạn các vấn đề liên quan đến lịch trình, cuộc hẹn và công việc. Bạn cần tôi giúp gì trong phạm vi này không?"
-        ]
-        return random.choice(irrelevant_responses)
-    return None
-
+# The hard-coded _handle_irrelevant_input function is no longer needed.
 
 class FunctionCallHandler:
-    def __init__(self, advisor: ScheduleAdvisor = None):  # cho phép inject advisor có LLM
+    def __init__(self, advisor: ScheduleAdvisor = None):
         self.advisor = advisor or ScheduleAdvisor()
         self.notification_manager = get_notification_manager()
+        self.functions = get_function_definitions()
+        self.agent = GeminiService()
 
-    def handle_function_call(self, call, user_input: str) -> str:
+    def handle_function_call(self, call, user_input: str) -> str | dict:
         """Xử lý các hàm cho Agent AI"""
         name = call.name
         args = call.args if hasattr(call, 'args') else {}
 
-        executor = ExecuteSchedule()
+        # Executor is now initialized only when needed to avoid unnecessary DB connections.
+        executor = None
 
         try:
             if name == "advise_schedule":
                 return self._handle_advise_schedule(args, user_input)
-            elif name == "smart_add_schedule":
+            elif name == "handle_greeting_goodbye":
+                return self._handle_greeting_goodbye(args)
+            elif name == "handle_off_topic_query":
+                return self._handle_off_topic_query(args)
+
+            # For all other functions that interact with the database
+            executor = ExecuteSchedule()
+            if name == "smart_add_schedule":
                 return self._handle_smart_add_schedule(args, user_input, executor)
             elif name == "get_schedules":
                 return self._handle_get_schedules(executor)
@@ -59,30 +52,57 @@ class FunctionCallHandler:
         except Exception as e:
             return f"Lỗi khi thực hiện: {str(e)}"
         finally:
-            executor.close()
+            if executor:
+                executor.close()
+
+    # **MODIFIED METHOD**
+    def _handle_greeting_goodbye(self, args: Dict) -> str:
+        """Handles basic conversational turns by generating a dynamic AI response."""
+        user_message = args.get('message', 'chào bạn')
+
+        prompt = f"""You are a friendly scheduling assistant. 
+        The user has said something conversational (like a greeting, thanks, or a simple question). 
+        Respond naturally, briefly, and in Vietnamese.
+        User's message: "{user_message}"
+        """
+        try:
+            # Call the LLM for a text-only response
+            response = self.agent.get_ai_response(prompt)
+            text_response = self.agent.format_response(response)
+            return text_response or "Chào bạn, tôi có thể giúp gì cho bạn?"
+        except Exception as e:
+            print(f"Error in _handle_greeting_goodbye: {e}")
+            return "Chào bạn! Tôi sẵn sàng giúp bạn lập lịch."
+
+    # **MODIFIED METHOD**
+    def _handle_off_topic_query(self, args: Dict) -> str:
+        """Handles off-topic queries by generating a polite, redirecting AI response."""
+        user_query = args.get('query', '')
+
+        prompt = f"""You are a helpful AI assistant focused on scheduling tasks. 
+        The user has asked something off-topic. 
+        Politely state that you can only handle scheduling-related requests and gently guide them back. 
+        Respond briefly and in Vietnamese.
+        User's off-topic query: "{user_query}"
+        """
+        try:
+            # Call the LLM for a text-only response
+            response = self.agent.get_ai_response(prompt)
+            text_response = self.agent.format_response(response)
+            return text_response or "Xin lỗi, tôi chỉ có thể hỗ trợ các vấn đề liên quan đến lịch trình."
+        except Exception as e:
+            print(f"Error in _handle_off_topic_query: {e}")
+            return "Xin lỗi, chuyên môn của tôi là về lịch trình. Bạn cần giúp gì về việc đó không?"
 
     def _handle_advise_schedule(self, args: Dict, user_input: str) -> str:
-        # irrelevant_response = _handle_irrelevant_input(user_input)
-        # if irrelevant_response:
-        #     return f"[Trợ lý]: {irrelevant_response}"
-
         """Xử lý tư vấn lịch"""
         user_request = args.get('user_request', user_input)
+        # ... (rest of the method is unchanged)
         preferred_time_of_day = args.get('preferred_time_of_day')
         duration = args.get('duration')
         priority = args.get('priority')
         preferreddate = args.get('preferred_date')
         preferred_weekday = args.get('preferred_weekday')
-
-        print(f"DEBUG advise_schedule:")
-        print(f"user_request: {user_request}")  
-        print(f"preferred_time_of_day: {preferred_time_of_day}")
-        print(f"duration: {duration}")
-        print(f"priority: {priority}")
-        print(f"preferred_date: {preferreddate}")
-        print(f"preferred_weekday: {preferred_weekday}")
-
-        # Ủy quyền cho advisor quyết định hỏi thêm hay tư vấn
         result = self.advisor.advise_schedule(
             user_request=user_request,
             preferred_time_of_day=preferred_time_of_day,
@@ -91,9 +111,9 @@ class FunctionCallHandler:
             preferred_date=preferreddate,
             preferred_weekday=preferred_weekday
         )
-        print(f"DEBUG advise_schedule result: {result} \n")
         return self.advisor.format_response(result)
 
+    # (The rest of your handler methods: _handle_smart_add_schedule, etc. remain the same)
     def _handle_smart_add_schedule(self, args: Dict, user_input: str, executor: ExecuteSchedule) -> str:
         """Xử lý thêm lịch thông minh"""
         user_request = args.get('user_request', user_input)
@@ -109,22 +129,22 @@ class FunctionCallHandler:
         if start_time_str:
             # Gemini đã parse được thời gian
             print(f"Using Gemini parsed time: {start_time_str}")
-            
+
             # Kiểm tra và sửa năm nếu cần
             from utils.timezone_utils import parse_time_to_vietnam, vietnam_isoformat, get_vietnam_now
             from datetime import datetime
-            
+
             try:
                 start_time_vn = parse_time_to_vietnam(start_time_str)
                 current_year = get_vietnam_now().year
-                
+
                 # Nếu năm không đúng, sửa lại
                 if start_time_vn.year != current_year:
                     print(f"⚠️ WARNING: Gemini returned wrong year {start_time_vn.year}, correcting to {current_year}")
                     start_time_vn = start_time_vn.replace(year=current_year)
                     start_time_str = vietnam_isoformat(start_time_vn)
                     print(f"✅ Corrected time: {start_time_str}")
-                
+
                 if not end_time_str:
                     # Tính toán end_time dựa trên start_time
                     end_time_vn = start_time_vn + timedelta(hours=1)  # Default 1 hour
@@ -135,7 +155,7 @@ class FunctionCallHandler:
                     if end_time_vn.year != current_year:
                         end_time_vn = end_time_vn.replace(year=current_year)
                         end_time_str = vietnam_isoformat(end_time_vn)
-                        
+
             except Exception as e:
                 print(f"⚠️ Error parsing time: {e}, falling back to advisor")
                 start_time_str = None
@@ -243,7 +263,7 @@ class FunctionCallHandler:
             duration_unit = duration_match.group(2)
             if 'tiếng' in duration_unit or 'giờ' in duration_unit:
                 return suggested_time + timedelta(hours=duration_num)
-            else: 
+            else:
                 return suggested_time + timedelta(minutes=duration_num)
         else:
             return suggested_time + timedelta(hours=1)

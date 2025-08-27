@@ -3,6 +3,7 @@ import google.generativeai as genai
 import threading
 import queue
 from typing import Any
+from google.generativeai.types import GenerateContentResponse
 from core.config import Config
 from core.exceptions import GeminiAPIError
 
@@ -11,7 +12,7 @@ class GeminiService:
     def __init__(self):
         if not Config.GEMINI_API_KEY:
             raise GeminiAPIError('Vui lòng thiết lập biến môi trường GEMINI_API_KEY')
-        
+
         genai.configure(api_key=Config.GEMINI_API_KEY)
         self.model = genai.GenerativeModel(Config.GEMINI_MODEL)
         
@@ -19,7 +20,7 @@ class GeminiService:
             temperature=0.1,
             max_output_tokens=100
         )
-    
+
     def _call_gemini_api(self, q: queue.Queue, system_prompt: str, functions: list, generation_config):
         """Thread-safe Gemini API call"""
         try:
@@ -61,3 +62,29 @@ class GeminiService:
             return None
         except (IndexError, AttributeError):
             return None
+
+    def get_ai_response(self, prompt: str) -> GenerateContentResponse:
+        """
+        Receives a user prompt, processes it with the AIAgent, and returns the raw response.
+        """
+        response = self.model.generate_content(prompt)
+        return response
+
+    def format_response(self, response: GenerateContentResponse | str | dict) -> str:
+        """
+        Formats various response types from the agent into a user-friendly string.
+        """
+        # 1. Handle raw Gemini SDK response objects
+        if isinstance(response, GenerateContentResponse):
+            try:
+                # The .text property is the safest and most direct way to get text
+                return response.text
+            except AttributeError:
+                return "Lỗi: Không thể trích xuất nội dung từ phản hồi của AI."
+
+        # 2. Handle pre-formatted strings
+        if isinstance(response, str):
+            return response
+
+        # 4. Fallback for any other unexpected data types
+        return "Không thể định dạng loại phản hồi không xác định."
