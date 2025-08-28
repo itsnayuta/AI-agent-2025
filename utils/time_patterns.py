@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, time
+import re
 
 def parse_weekday(match, current_time, weekday_map):
     weekday_str = match.group(1).lower().replace(' ', '')
@@ -177,6 +178,7 @@ def parse_time_weekday(match, current_time, weekday_map):
         days_ahead += 7
     target_date = current_time + timedelta(days=days_ahead)
     return target_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
 def parse_specific_date(match, current_time):
     try:
         day = int(match.group(1))
@@ -243,6 +245,7 @@ def parse_next_month(match, current_time):
     return datetime(year, next_month, 1, 8, 0)
 
 def get_time_patterns(current_time):
+    """Trả về danh sách các pattern cơ bản cho việc parse thời gian"""
     return [
         (r"ngày\s*(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{4}))?", lambda m: parse_specific_date(m, current_time)),
         (r"(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{4}))?", lambda m: parse_specific_date(m, current_time)),
@@ -255,3 +258,36 @@ def get_time_patterns(current_time):
         (r"(?:tuần\s*này|this\s*week)", lambda m: parse_this_week(m, current_time)),
         (r"(?:tháng\s*sau|next\s*month)", lambda m: parse_next_month(m, current_time)),
     ]
+
+def get_advanced_time_patterns(current_time, weekday_map):
+    """Trả về danh sách các pattern nâng cao cho việc parse thời gian với weekday"""
+    return [
+        (r"(\d{1,2})(?:h|:)?(\d{2})?\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*tuần\s*này",
+        lambda m: parse_time_weekday_this_week(m, current_time, weekday_map)),
+        (r"(\d{1,2})(?:h|:)?(\d{2})?\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*tuần\s*sau",
+        lambda m: parse_time_weekday_next_week(m, current_time, weekday_map)),
+        (r"(sáng|chiều|tối)\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*(?:lúc|vào)?\s*(\d{1,2})(?:h|:)?(\d{2})?",
+        lambda m: parse_time_period_weekday_with_hour(m, current_time, weekday_map)),
+        (r"(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*(?:tuần\s*này|tuần\s*sau)?\s*(?:lúc|vào)?\s*(\d{1,2})(?:h|:)?(\d{2})?",
+        lambda m: parse_weekday_time(m, current_time, weekday_map)),
+        (r"(\d{1,2})(?:h|:)?(\d{2})?\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])",
+        lambda m: parse_time_weekday(m, current_time, weekday_map)),
+        (r"(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*tuần\s*này",
+        lambda m: parse_weekday_this_week(m, current_time, weekday_map)),
+        (r"(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*tuần\s*sau",
+        lambda m: parse_weekday_next_week(m, current_time, weekday_map)),
+        (r"(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])",
+        lambda m: parse_weekday(m, current_time, weekday_map)),
+        (r"(sáng|chiều|tối)\s*(hôm\s*nay|mai|ngày\s*kia)", lambda m: parse_time_period_day(m, current_time)),
+        (r"(sáng|chiều|tối)\s*(thứ\s*[2-7]|chủ\s*nhật)",
+        lambda m: parse_time_period_weekday(m, current_time, weekday_map)),
+        (r"sau\s*(\d+)\s*ngày", lambda m: parse_after_days(m, current_time)),
+        (r"sau\s*(\d+)\s*tuần", lambda m: parse_after_weeks(m, current_time)),
+        (r"sau\s*(\d+)\s*tháng", lambda m: parse_after_months(m, current_time)),
+    ]
+
+def get_all_time_patterns(current_time, weekday_map):
+    """Trả về tất cả các pattern cơ bản và nâng cao"""
+    basic_patterns = get_time_patterns(current_time)
+    advanced_patterns = get_advanced_time_patterns(current_time, weekday_map)
+    return basic_patterns + advanced_patterns

@@ -5,13 +5,7 @@ import sqlite3
 import pytz
 
 # Import các hàm kiểm tra lịch độc lập và các hàm tiện ích khác
-from utils.time_patterns import (
-    get_time_patterns,
-    parse_weekday, parse_weekday_this_week, parse_weekday_next_week,
-    parse_time_period_day, parse_time_period_weekday, parse_time_period_weekday_with_hour,
-    parse_after_days, parse_after_weeks, parse_after_months,
-    parse_weekday_time, parse_time_weekday_this_week, parse_time_weekday_next_week, parse_time_weekday
-)
+from utils.time_patterns import get_all_time_patterns
 from utils.task_categories import task_categories
 
 def check_schedule_overlap(conn: sqlite3.Connection, start_time: datetime, end_time: datetime) -> bool:
@@ -45,31 +39,7 @@ class ScheduleAdvisor:
             'thứ bảy': 5, 't7': 5, 'thứ 7': 5, 'thứbảy': 5, 'thứ7': 5
         }
 
-        date_patterns = get_time_patterns(self.current_time)
-        self.time_patterns = date_patterns + [
-            (r"(\d{1,2})(?:h|:)?(\d{2})?\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*tuần\s*này",
-            lambda m: parse_time_weekday_this_week(m, self.current_time, self.weekday_map)),
-            (r"(\d{1,2})(?:h|:)?(\d{2})?\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*tuần\s*sau",
-            lambda m: parse_time_weekday_next_week(m, self.current_time, self.weekday_map)),
-            (r"(sáng|chiều|tối)\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*(?:lúc|vào)?\s*(\d{1,2})(?:h|:)?(\d{2})?",
-            lambda m: parse_time_period_weekday_with_hour(m, self.current_time, self.weekday_map)),
-            (r"(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*(?:tuần\s*này|tuần\s*sau)?\s*(?:lúc|vào)?\s*(\d{1,2})(?:h|:)?(\d{2})?",
-            lambda m: parse_weekday_time(m, self.current_time, self.weekday_map)),
-            (r"(\d{1,2})(?:h|:)?(\d{2})?\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])",
-            lambda m: parse_time_weekday(m, self.current_time, self.weekday_map)),
-            (r"(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*tuần\s*này",
-            lambda m: parse_weekday_this_week(m, self.current_time, self.weekday_map)),
-            (r"(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*tuần\s*sau",
-            lambda m: parse_weekday_next_week(m, self.current_time, self.weekday_map)),
-            (r"(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])",
-            lambda m: parse_weekday(m, self.current_time, self.weekday_map)),
-            (r"(sáng|chiều|tối)\s*(hôm\s*nay|mai|ngày\s*kia)", lambda m: parse_time_period_day(m, self.current_time)),
-            (r"(sáng|chiều|tối)\s*(thứ\s*[2-7]|chủ\s*nhật)",
-            lambda m: parse_time_period_weekday(m, self.current_time, self.weekday_map)),
-            (r"sau\s*(\d+)\s*ngày", lambda m: parse_after_days(m, self.current_time)),
-            (r"sau\s*(\d+)\s*tuần", lambda m: parse_after_weeks(m, self.current_time)),
-            (r"sau\s*(\d+)\s*tháng", lambda m: parse_after_months(m, self.current_time)),
-        ]
+        self.time_patterns = get_all_time_patterns(self.current_time, self.weekday_map)
 
         self.task_categories = task_categories
         self.high_priority_keywords = ['gấp', 'urgent', 'quan trọng', 'important', 'khẩn cấp', 'deadline', 'hạn chót']
