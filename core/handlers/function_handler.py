@@ -52,47 +52,41 @@ class FunctionCallHandler:
                 executor.close()
 
     def _handle_greeting_goodbye(self, args: Dict) -> str:
-        """Handles basic conversational turns and exit commands."""
+        """Handles basic conversational turns by generating a dynamic AI response."""
         user_message = args.get('message', 'chào bạn')
-        is_exit = args.get('is_exit', False)
-        
-        # Kiểm tra các từ khóa thoát
-        exit_keywords = ['exit', 'quit', 'thoát', 'bye', 'goodbye', 'tạm biệt']
-        if is_exit or any(keyword in user_message.lower() for keyword in exit_keywords):
-            return {
-                "message": "Cảm ơn bạn đã sử dụng dịch vụ! Chúc bạn một ngày tốt lành!",
-                "action": "exit"
-            }
 
-        prompt = f"""Bạn là trợ lý lập lịch thân thiện và hữu ích. 
-        Người dùng vừa nói chuyện phiếm (như chào hỏi, cảm ơn, hoặc câu hỏi đơn giản). 
-        Hãy trả lời một cách tự nhiên, ngắn gọn bằng tiếng Việt. Hãy nhớ ngữ cảnh trước đó nếu có.
-        Tin nhắn của người dùng: "{user_message}"
+        prompt = f"""You are a friendly scheduling assistant. 
+        The user has said something conversational (like a greeting, thanks, or a simple question). 
+        Respond naturally, briefly, and in Vietnamese.
+        User's message: "{user_message}"
         """
         try:
-            # Gọi LLM để có phản hồi chỉ text
+            # Call the LLM for a text-only response
             response = self.agent.get_ai_response(prompt)
             text_response = self.agent.format_response(response)
             return text_response or "Chào bạn, tôi có thể giúp gì cho bạn?"
         except Exception as e:
+            print(f"Error in _handle_greeting_goodbye: {e}")
             return "Chào bạn! Tôi sẵn sàng giúp bạn lập lịch."
 
+    # **MODIFIED METHOD**
     def _handle_off_topic_query(self, args: Dict) -> str:
-        """Xử lý các câu hỏi ngoài chủ đề bằng cách tạo phản hồi AI lịch sự, hướng dẫn."""
+        """Handles off-topic queries by generating a polite, redirecting AI response."""
         user_query = args.get('query', '')
 
-        prompt = f"""Bạn là trợ lý AI hữu ích chuyên về quản lý lịch trình. 
-        Người dùng vừa hỏi điều gì đó ngoài chủ đề. 
-        Hãy lịch sự nói rằng bạn chỉ có thể xử lý các yêu cầu liên quan đến lịch trình và nhẹ nhàng hướng dẫn họ quay lại. 
-        Trả lời ngắn gọn bằng tiếng Việt.
-        Câu hỏi ngoài chủ đề của người dùng: "{user_query}"
+        prompt = f"""You are a helpful AI assistant focused on scheduling tasks. 
+        The user has asked something off-topic. 
+        Politely state that you can only handle scheduling-related requests and gently guide them back. 
+        Respond briefly and in Vietnamese.
+        User's off-topic query: "{user_query}"
         """
         try:
-            # Gọi LLM để có phản hồi chỉ text
+            # Call the LLM for a text-only response
             response = self.agent.get_ai_response(prompt)
             text_response = self.agent.format_response(response)
             return text_response or "Xin lỗi, tôi chỉ có thể hỗ trợ các vấn đề liên quan đến lịch trình."
         except Exception as e:
+            print(f"Error in _handle_off_topic_query: {e}")
             return "Xin lỗi, chuyên môn của tôi là về lịch trình. Bạn cần giúp gì về việc đó không?"
 
     async def _handle_advise_schedule(self, args: Dict, user_input: str) -> str:

@@ -119,7 +119,7 @@ class ExecuteSchedule:
                     new_event_id = self.calendar_service.create_event(final_title, final_desc, final_start, final_end)
                     if new_event_id:
                         cursor.execute('UPDATE schedules SET google_event_id = ? WHERE id = ?',
-                                       (new_event_id, schedule_id))
+                                    (new_event_id, schedule_id))
                         self.conn.commit()
             return "✅ Đã cập nhật lịch thành công."
         except Exception as e:
