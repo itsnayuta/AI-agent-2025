@@ -17,12 +17,12 @@ class GeminiService:
         self.model = genai.GenerativeModel(Config.GEMINI_MODEL)
         
         self.generation_config = genai.types.GenerationConfig(
-            temperature=0.0,  # Giảm xuống 0 để tăng tính nhất quán
+            temperature=0.0,  
             max_output_tokens=100
         )
 
     def _call_gemini_api(self, q: queue.Queue, system_prompt: str, functions: list, generation_config):
-        """Gọi API Gemini an toàn với thread"""
+        """Gọi API Gemini"""
         try:
             response = self.model.generate_content(
                 system_prompt,
@@ -64,26 +64,10 @@ class GeminiService:
             return None
 
     def get_ai_response(self, prompt: str) -> GenerateContentResponse:
-        """
-        Receives a user prompt, processes it with the AIAgent, and returns the raw response.
-        """
         response = self.model.generate_content(prompt)
         return response
 
-    async def process_message(self, prompt: str) -> str:
-        """
-        Process a message and return the text response from Gemini
-        """
-        try:
-            response = self.model.generate_content(prompt)
-            return response.text
-        except Exception as e:
-            return f"Lỗi khi xử lý với Gemini: {str(e)}"
-
     def format_response(self, response: GenerateContentResponse | str | dict) -> str:
-        """
-        Formats various response types from the agent into a user-friendly string.
-        """
         # 1. Handle raw Gemini SDK response objects
         if isinstance(response, GenerateContentResponse):
             try:

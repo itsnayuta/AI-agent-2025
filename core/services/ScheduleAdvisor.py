@@ -15,12 +15,7 @@ from utils.time_patterns import (
 from utils.task_categories import task_categories
 
 def check_schedule_overlap(conn: sqlite3.Connection, start_time: datetime, end_time: datetime) -> bool:
-    """
-    Kiểm tra xem một khoảng thời gian có bị trùng với lịch đã có trong cơ sở dữ liệu hay không.
-    Trả về True nếu KHÔNG có trùng lặp, False nếu có.
-    """
     cursor = conn.cursor()
-    # Database lưu thời gian với timezone, nên ta giữ nguyên timezone để so sánh
     start_str = start_time.isoformat()
     end_str = end_time.isoformat()
     
@@ -29,25 +24,17 @@ def check_schedule_overlap(conn: sqlite3.Connection, start_time: datetime, end_t
         WHERE NOT (? <= start_time OR ? >= end_time)
     """
     cursor.execute(query, (end_str, start_str))
-    # Nếu số lượng lịch trình trùng lặp > 0, trả về False
     count = cursor.fetchone()[0]
     return count == 0
 
 class ScheduleAdvisor:
-    """
-    Lớp ScheduleAdvisor cung cấp các chức năng gợi ý lịch trình thông minh:
-    - Phân tích yêu cầu của người dùng
-    - Kiểm tra lịch trống, đề xuất thời gian
-    - Nếu thông tin chưa đủ (đặc biệt là thời gian), sinh câu hỏi làm rõ (ưu tiên dùng LLM nếu có)
-    """
     def __init__(self, db_path='database/schedule.db', llm=None):
-        # Lấy múi giờ Việt Nam
         self.vietnam_tz = pytz.timezone('Asia/Ho_Chi_Minh')
         self.current_time = datetime.now(self.vietnam_tz)
-        # Thiết lập giờ làm việc và giờ nghỉ trưa
+
         self.business_hours = (8, 17)
         self.lunch_time = (12, 13)
-        # Ánh xạ các từ khóa ngày trong tuần sang số
+
         self.weekday_map = {
             'chủ nhật': 6, 'cn': 6, 'chủnhật': 6,
             'thứ hai': 0, 't2': 0, 'thứ 2': 0, 'thứhai': 0, 'thứ2': 0,
@@ -57,8 +44,7 @@ class ScheduleAdvisor:
             'thứ sáu': 4, 't6': 4, 'thứ 6': 4, 'thứsáu': 4, 'thứ6': 4,
             'thứ bảy': 5, 't7': 5, 'thứ 7': 5, 'thứbảy': 5, 'thứ7': 5
         }
-        # Danh sách các pattern regex để trích xuất thời gian
-        # Ưu tiên pattern ngày cụ thể trước pattern thứ trong tuần
+
         date_patterns = get_time_patterns(self.current_time)
         self.time_patterns = date_patterns + [
             (r"(\d{1,2})(?:h|:)?(\d{2})?\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*tuần\s*này",
@@ -84,11 +70,11 @@ class ScheduleAdvisor:
             (r"sau\s*(\d+)\s*tuần", lambda m: parse_after_weeks(m, self.current_time)),
             (r"sau\s*(\d+)\s*tháng", lambda m: parse_after_months(m, self.current_time)),
         ]
-        # Danh mục công việc và từ khóa ưu tiên
+
         self.task_categories = task_categories
         self.high_priority_keywords = ['gấp', 'urgent', 'quan trọng', 'important', 'khẩn cấp', 'deadline', 'hạn chót']
         self.low_priority_keywords = ['không gấp', 'có thể', 'nếu được', 'tùy ý']
-        # giữ reference đến LLM/Gemini (nếu có) để sinh câu hỏi tự nhiên
+
         self.llm = llm
         # Import google_calendar_service để sử dụng các tính năng mới
         try:
