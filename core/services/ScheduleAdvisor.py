@@ -796,7 +796,9 @@ class ScheduleAdvisor:
                 )
                 
                 if available_slots:
-                    response = f"📅 **Lịch khám răng {target_date.strftime('%d/%m/%Y')} - Thời lượng: {duration_minutes} phút**\n\n"
+                    # Trích xuất loại lịch từ user input
+                    schedule_type = self._extract_schedule_type(user_input)
+                    response = f"📅 **{schedule_type} {target_date.strftime('%d/%m/%Y')} - Thời lượng: {duration_minutes} phút**\n\n"
                     response += "🕒 **Các khung giờ trống:**\n"
                     for i, slot in enumerate(available_slots[:8], 1):  # Hiển thị tối đa 8 slots
                         response += f"{i}. {slot}\n"
@@ -828,6 +830,50 @@ Ví dụ: "Bạn muốn khám vào ngày nào? Thời lượng khoảng bao lâu
             # Fallback về phương thức truyền thống
             response = self.advise_schedule(user_input)
             return self.format_response(response)
+
+    def _extract_schedule_type(self, text: str) -> str:
+        """Trích xuất loại lịch từ user input"""
+        text_lower = text.lower()
+        
+        # Mapping các từ khóa với loại lịch
+        schedule_types = {
+            'họp': 'Lịch họp',
+            'meeting': 'Lịch họp',
+            'khám': 'Lịch khám',
+            'appointment': 'Lịch hẹn',
+            'đi ăn': 'Lịch ăn uống',
+            'ăn': 'Lịch ăn uống',
+            'học': 'Lịch học',
+            'study': 'Lịch học',
+            'làm việc': 'Lịch làm việc',
+            'work': 'Lịch làm việc',
+            'du lịch': 'Lịch du lịch',
+            'travel': 'Lịch du lịch',
+            'thể thao': 'Lịch thể thao',
+            'sport': 'Lịch thể thao',
+            'yoga': 'Lịch yoga',
+            'gym': 'Lịch tập gym',
+            'chơi game': 'Lịch giải trí',
+            'game': 'Lịch giải trí',
+            'xem phim': 'Lịch giải trí',
+            'movie': 'Lịch giải trí'
+        }
+        
+        # Tìm loại lịch phù hợp nhất
+        for keyword, schedule_type in schedule_types.items():
+            if keyword in text_lower:
+                return schedule_type
+        
+        # Nếu không tìm thấy, dùng từ đầu tiên trong câu hoặc mặc định
+        words = text_lower.split()
+        if words:
+            first_word = words[0]
+            # Loại bỏ các từ không phù hợp
+            if first_word not in ['tôi', 'muốn', 'cần', 'xin', 'vui', 'lòng', 'hãy', 'làm', 'cho', 'về']:
+                return f"Lịch {first_word.capitalize()}"
+        
+        # Mặc định
+        return "Lịch trình"
 
     def _extract_duration_minutes(self, text: str) -> int:
         """Trích xuất thời lượng từ text và trả về số phút"""
