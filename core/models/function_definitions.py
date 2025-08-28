@@ -120,32 +120,16 @@ def get_function_definitions() -> List[Dict[str, Any]]:
         },
         {
             "name": "delete_schedule",
-            "description": "Xóa (các) lịch khỏi hệ thống dựa trên khoảng thời gian, ngày, tháng hoặc năm.",
+            "description": "Xóa lịch khỏi hệ thống.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "start_time": {
-                        "type": "string",
-                        "description": "Thời gian bắt đầu của khoảng thời gian cần xóa lịch (YYYY-MM-DD HH:MM:SS)."
-                    },
-                    "end_time": {
-                        "type": "string",
-                        "description": "Thời gian kết thúc của khoảng thời gian cần xóa lịch (YYYY-MM-DD HH:MM:SS)."
-                    },
-                    "date": {
-                        "type": "string",
-                        "description": "Ngày cụ thể để xóa tất cả lịch trong ngày đó (YYYY-MM-DD)."
-                    },
-                    "month": {
+                    "schedule_id": {
                         "type": "integer",
-                        "description": "Tháng cụ thể để xóa tất cả lịch trong tháng đó (cần có 'year')."
-                    },
-                    "year": {
-                        "type": "integer",
-                        "description": "Năm cụ thể để xóa tất cả lịch trong năm đó."
+                        "description": "ID của lịch cần xóa"
                     }
                 },
-                "required": []
+                "required": ["schedule_id"]
             }
         },
         {

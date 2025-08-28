@@ -17,7 +17,7 @@ class GeminiService:
         self.model = genai.GenerativeModel(Config.GEMINI_MODEL)
         
         self.generation_config = genai.types.GenerationConfig(
-            temperature=0.1,
+            temperature=0.0,  # Giảm xuống 0 để tăng tính nhất quán
             max_output_tokens=100
         )
 
@@ -69,6 +69,16 @@ class GeminiService:
         """
         response = self.model.generate_content(prompt)
         return response
+
+    async def process_message(self, prompt: str) -> str:
+        """
+        Process a message and return the text response from Gemini
+        """
+        try:
+            response = self.model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            return f"Lỗi khi xử lý với Gemini: {str(e)}"
 
     def format_response(self, response: GenerateContentResponse | str | dict) -> str:
         """

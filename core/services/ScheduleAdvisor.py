@@ -24,8 +24,6 @@ def check_schedule_overlap(conn: sqlite3.Connection, start_time: datetime, end_t
     start_str = start_time.isoformat()
     end_str = end_time.isoformat()
     
-    # Tìm kiếm các lịch trình có overlap với khoảng thời gian đầu vào
-    # Overlap xảy ra khi: NOT (new_end <= existing_start OR new_start >= existing_end)
     query = """
         SELECT COUNT(*) FROM schedules
         WHERE NOT (? <= start_time OR ? >= end_time)
@@ -60,7 +58,9 @@ class ScheduleAdvisor:
             'thứ bảy': 5, 't7': 5, 'thứ 7': 5, 'thứbảy': 5, 'thứ7': 5
         }
         # Danh sách các pattern regex để trích xuất thời gian
-        self.time_patterns = [
+        # Ưu tiên pattern ngày cụ thể trước pattern thứ trong tuần
+        date_patterns = get_time_patterns(self.current_time)
+        self.time_patterns = date_patterns + [
             (r"(\d{1,2})(?:h|:)?(\d{2})?\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*tuần\s*này",
             lambda m: parse_time_weekday_this_week(m, self.current_time, self.weekday_map)),
             (r"(\d{1,2})(?:h|:)?(\d{2})?\s*(thứ\s*[2-7]|chủ\s*nhật|cn|t[2-7])\s*tuần\s*sau",
@@ -83,7 +83,7 @@ class ScheduleAdvisor:
             (r"sau\s*(\d+)\s*ngày", lambda m: parse_after_days(m, self.current_time)),
             (r"sau\s*(\d+)\s*tuần", lambda m: parse_after_weeks(m, self.current_time)),
             (r"sau\s*(\d+)\s*tháng", lambda m: parse_after_months(m, self.current_time)),
-        ] + get_time_patterns(self.current_time)
+        ]
         # Danh mục công việc và từ khóa ưu tiên
         self.task_categories = task_categories
         self.high_priority_keywords = ['gấp', 'urgent', 'quan trọng', 'important', 'khẩn cấp', 'deadline', 'hạn chót']
@@ -755,11 +755,7 @@ class ScheduleAdvisor:
             # Bỏ qua giờ ăn trưa
             if not (current_time.hour == 12 and current_time.minute == 0):
                 # Kiểm tra xung đột với database
-                if self.calendar_service:
-                    is_free = self.calendar_service.is_time_slot_free(current_time, slot_end)
-                else:
-                    # Fallback kiểm tra với database trực tiếp
-                    is_free = check_schedule_overlap(self.conn, current_time, slot_end)
+                is_free = check_schedule_overlap(self.conn, current_time, slot_end)
                 
                 if is_free:
                     available_slots.append(f"{current_time.strftime('%H:%M')} - {slot_end.strftime('%H:%M')}")
@@ -785,7 +781,7 @@ class ScheduleAdvisor:
         try:
             # Trích xuất thông tin từ yêu cầu người dùng
             extracted_time = self._extract_time(user_input)
-            duration_minutes = self._extract_duration_from_text(user_input)
+            duration_minutes = self._extract_duration_minutes(user_input)
             
             if extracted_time and duration_minutes:
                 # Tìm khung giờ trống cho ngày được yêu cầu
@@ -810,8 +806,7 @@ class ScheduleAdvisor:
                     return f"❌ **Không có khung giờ trống nào trong ngày {target_date.strftime('%d/%m/%Y')}**\n\nBạn có muốn tôi đề xuất ngày khác không?"
             
             # Nếu không đủ thông tin, dùng Gemini để hỏi làm rõ
-            gemini_prompt = f"""
-TƯ VẤN LỊCH TRÌNH NGẮN GỌN
+            gemini_prompt = f"""TƯ VẤN LỊCH TRÌNH NGẮN GỌN
 
 Yêu cầu: {user_input}
 Thời gian hiện tại: {self.current_time.strftime('%Y-%m-%d %H:%M')} (Việt Nam)
@@ -831,13 +826,11 @@ Ví dụ: "Bạn muốn khám vào ngày nào? Thời lượng khoảng bao lâu
         except Exception as e:
             print(f"Lỗi khi sử dụng tư vấn thông minh: {e}")
             # Fallback về phương thức truyền thống
-            response = self.analyze_schedule_request(user_input)
+            response = self.advise_schedule(user_input)
             return self.format_response(response)
 
-    def _extract_duration_from_text(self, text: str) -> int:
-        """Trích xuất thời lượng từ text (phút)"""
-        import re
-        
+    def _extract_duration_minutes(self, text: str) -> int:
+        """Trích xuất thời lượng từ text và trả về số phút"""
         # Tìm các pattern thời lượng
         patterns = [
             r'(\d+)\s*phút',

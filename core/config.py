@@ -8,7 +8,7 @@ class Config:
     # API Settings
     GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
     GEMINI_MODEL = 'gemini-1.5-flash'
-    GEMINI_TIMEOUT = 30
+    GEMINI_TIMEOUT = 60  # Tăng timeout để giảm khả năng fallback
     
     # Database Settings
     DATABASE_PATH = 'database/schedule.db'

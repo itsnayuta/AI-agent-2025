@@ -7,6 +7,7 @@ from core.services.ScheduleAdvisor import ScheduleAdvisor
 from core.services.ExecuteSchedule import ExecuteSchedule
 from core.notification import get_notification_manager
 from core.services.gemini_service import GeminiService
+from utils.timezone_utils import parse_time_to_vietnam, vietnam_isoformat, get_vietnam_now
 
 class FunctionCallHandler:
     def __init__(self, advisor: ScheduleAdvisor = None):
@@ -98,33 +99,37 @@ class FunctionCallHandler:
         """Xử lý tư vấn lịch với Gemini AI thông minh"""
         user_request = args.get('user_request', user_input)
         
-        try:
-            # Đảm bảo advisor có llm
-            if not self.advisor.llm and hasattr(self, 'agent'):
-                self.advisor.llm = self.agent
-            
-            # Sử dụng tư vấn thông minh mới
-            intelligent_response = await self.advisor.intelligent_schedule_advice(user_request)
-            if intelligent_response and len(intelligent_response.strip()) > 0:
-                return intelligent_response
-        except Exception as e:
-            print(f"Lỗi khi sử dụng tư vấn thông minh: {e}")
+        # Enable tính năng mới
+        if True:
+            try:
+                # Đảm bảo advisor có llm
+                if not self.advisor.llm and hasattr(self, 'agent'):
+                    self.advisor.llm = self.agent
+                
+                # Sử dụng tư vấn thông minh mới
+                intelligent_response = await self.advisor.intelligent_schedule_advice(user_request)
+                if intelligent_response and len(intelligent_response.strip()) > 0:
+                    return intelligent_response
+            except Exception as e:
+                print(f"Lỗi khi sử dụng tư vấn thông minh: {e}")
         
-        # Fallback về phương thức truyền thống
-        preferred_time_of_day = args.get('preferred_time_of_day')
-        duration = args.get('duration')
-        priority = args.get('priority')
-        preferreddate = args.get('preferred_date')
-        preferred_weekday = args.get('preferred_weekday')
-        result = self.advisor.advise_schedule(
-            user_request=user_request,
-            preferred_time_of_day=preferred_time_of_day,
-            duration=duration,
-            priority=priority,
-            preferred_date=preferreddate,
-            preferred_weekday=preferred_weekday
-        )
-        return self.advisor.format_response(result)
+        try:
+            preferred_time_of_day = args.get('preferred_time_of_day')
+            duration = args.get('duration')
+            priority = args.get('priority')
+            preferreddate = args.get('preferred_date')
+            preferred_weekday = args.get('preferred_weekday')
+            result = self.advisor.advise_schedule(
+                user_request=user_request,
+                preferred_time_of_day=preferred_time_of_day,
+                duration=duration,
+                priority=priority,
+                preferred_date=preferreddate,
+                preferred_weekday=preferred_weekday
+            )
+            return self.advisor.format_response(result)
+        except Exception as e:
+            return f"Lỗi: {str(e)}"
 
     def _handle_smart_add_schedule(self, args: Dict, user_input: str, executor: ExecuteSchedule) -> str:
         """Xử lý thêm lịch thông minh"""
@@ -136,7 +141,6 @@ class FunctionCallHandler:
 
         if start_time_str:
             # Gemini đã parse được thời gian
-            from utils.timezone_utils import parse_time_to_vietnam, vietnam_isoformat, get_vietnam_now
 
             try:
                 start_time_vn = parse_time_to_vietnam(start_time_str)

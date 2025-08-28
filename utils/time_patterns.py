@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 
 def parse_weekday(match, current_time, weekday_map):
     weekday_str = match.group(1).lower().replace(' ', '')
@@ -184,11 +184,23 @@ def parse_specific_date(match, current_time):
         year = int(match.group(3)) if match.group(3) else current_time.year
         if not (1 <= day <= 31 and 1 <= month <= 12):
             return None
+        
+        # Tạo target_date với timezone nếu current_time có timezone
         target_date = datetime(year, month, day, 8, 0)
-        if target_date < current_time:
+        if current_time.tzinfo is not None:
+            # Nếu current_time có timezone, gán timezone cho target_date
+            target_date = target_date.replace(tzinfo=current_time.tzinfo)
+        
+        # So sánh chỉ ngày, không so sánh giờ để tránh lỗi timezone
+        current_date = current_time.date()
+        target_date_only = target_date.date()
+        
+        if target_date_only < current_date:
             target_date = target_date.replace(year=year + 1)
+        
         return target_date
-    except (ValueError, TypeError):
+    except (ValueError, TypeError) as e:
+        print(f"[DEBUG] parse_specific_date error: {e}")
         return None
 
 def parse_time(match, current_time):
