@@ -2,7 +2,11 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple, Union
 import sqlite3
-import pytz
+try:
+    import pytz
+    PYTZ_AVAILABLE = True
+except ImportError:
+    PYTZ_AVAILABLE = False
 
 # Import các hàm kiểm tra lịch độc lập và các hàm tiện ích khác
 from utils.time_patterns import get_all_time_patterns
@@ -23,8 +27,13 @@ def check_schedule_overlap(conn: sqlite3.Connection, start_time: datetime, end_t
 
 class ScheduleAdvisor:
     def __init__(self, db_path='database/schedule.db', llm=None):
-        self.vietnam_tz = pytz.timezone('Asia/Ho_Chi_Minh')
-        self.current_time = datetime.now(self.vietnam_tz)
+        if PYTZ_AVAILABLE:
+            self.vietnam_tz = pytz.timezone('Asia/Ho_Chi_Minh')
+            self.current_time = datetime.now(self.vietnam_tz)
+        else:
+            # Fallback nếu không có pytz
+            self.vietnam_tz = None
+            self.current_time = datetime.now()
 
         self.business_hours = (8, 17)
         self.lunch_time = (12, 13)
@@ -725,6 +734,61 @@ class ScheduleAdvisor:
                 
         return available_slots
 
+    def find_available_slots_around_time(self, target_date: datetime, duration_minutes: int, preferred_hour: int, preferred_minute: int) -> List[str]:
+        """
+        Tìm các khung giờ trống xung quanh thời gian ưa thích
+        """
+        available_slots = []
+        
+        # Tạo thời gian ưa thích
+        preferred_time = target_date.replace(hour=preferred_hour, minute=preferred_minute, second=0, microsecond=0)
+        
+        # Tìm các slot xung quanh thời gian ưa thích (±2 giờ)
+        search_hours = []
+        for hour_offset in range(-2, 3):  # -2, -1, 0, 1, 2
+            search_hour = preferred_hour + hour_offset
+            if 8 <= search_hour < 17:  # Trong giờ làm việc
+                search_hours.append(search_hour)
+        
+        # Thêm thời gian ưa thích vào đầu danh sách để ưu tiên
+        if preferred_hour in search_hours:
+            search_hours.remove(preferred_hour)
+        search_hours.insert(0, preferred_hour)
+        
+        for hour in search_hours:
+            # Thử các phút gần với thời gian ưa thích
+            if hour == preferred_hour:
+                # Ưu tiên thời gian chính xác
+                minutes_to_try = [preferred_minute, preferred_minute - 15, preferred_minute + 15]
+            else:
+                # Các giờ khác, thử giờ tròn và 30 phút
+                minutes_to_try = [0, 30]
+            
+            for minute in minutes_to_try:
+                if 0 <= minute < 60:
+                    candidate_time = target_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    slot_end = candidate_time + timedelta(minutes=duration_minutes)
+                    
+                    # Kiểm tra không vượt quá giờ làm việc
+                    if slot_end.hour > 17:
+                        continue
+                    
+                    # Bỏ qua giờ ăn trưa
+                    if 12 <= candidate_time.hour < 13:
+                        continue
+                    
+                    # Kiểm tra không trùng với lịch hiện có
+                    if check_schedule_overlap(self.conn, candidate_time, slot_end):
+                        slot_str = f"{candidate_time.strftime('%H:%M')} - {slot_end.strftime('%H:%M')}"
+                        if slot_str not in available_slots:
+                            available_slots.append(slot_str)
+                            
+                            # Giới hạn tối đa 5 slots để không quá nhiều
+                            if len(available_slots) >= 5:
+                                return available_slots
+        
+        return available_slots
+
     async def intelligent_schedule_advice(self, user_input: str, context: Dict = None) -> str:
         """
         Tư vấn lịch trình thông minh với tìm kiếm khung giờ trống
@@ -742,14 +806,31 @@ class ScheduleAdvisor:
             if extracted_time and duration_minutes:
                 # Tìm khung giờ trống cho ngày được yêu cầu
                 target_date = extracted_time.date()
-                target_datetime = datetime.combine(target_date, datetime.min.time()).replace(tzinfo=self.vietnam_tz)
+                if self.vietnam_tz:
+                    target_datetime = datetime.combine(target_date, datetime.min.time()).replace(tzinfo=self.vietnam_tz)
+                else:
+                    target_datetime = datetime.combine(target_date, datetime.min.time())
                 
-                available_slots = self.find_available_slots(
+                # Ưu tiên thời gian cụ thể được yêu cầu
+                preferred_hour = extracted_time.hour
+                preferred_minute = extracted_time.minute
+                
+                # Tìm slot xung quanh thời gian yêu cầu trước
+                available_slots = self.find_available_slots_around_time(
                     target_datetime, 
                     duration_minutes,
-                    preferred_start_hour=8,
-                    preferred_end_hour=17
+                    preferred_hour,
+                    preferred_minute
                 )
+                
+                # Nếu không tìm được slot xung quanh, tìm slot trong toàn bộ ngày
+                if not available_slots:
+                    available_slots = self.find_available_slots(
+                        target_datetime, 
+                        duration_minutes,
+                        preferred_start_hour=8,
+                        preferred_end_hour=17
+                    )
                 
                 if available_slots:
                     # Trích xuất loại lịch từ user input
